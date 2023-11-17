@@ -170,9 +170,23 @@ def compute_cost(sim_result):
     v_des = sim_result['flat']['x_dot']                             # Desired velocity
     q_des = sim_result['control']['cmd_q']                          # Desired attitude
     rotor_speeds_des = sim_result['control']['cmd_motor_speeds']    # Desired rotor speeds 
+    cmd_thrust = sim_result['control']['cmd_thrust']                # Desired thrust 
+    cmd_moment = sim_result['control']['cmd_moment']                # Desired body moment
 
-    # Write your cost function here. For example this is average position error over the trajectory. 
-    sim_cost = np.linalg.norm(x-x_des, axis=1).mean()
+    # Cost components
+    position_error = np.linalg.norm(x - x_des, axis=1).mean()
+    velocity_error = np.linalg.norm(v - v_des, axis=1).mean()
+
+    # Calculate attitude error (assuming quaternion representation)
+    # attitude_error = np.linalg.norm(q - q_des, axis=1).mean()  # Modify this based on your attitude representation
+    # Attitude error (for quaternions)
+    # attitude_error = quaternion_distance(q, q_des).mean()
+
+    # Input cost from thrust and body moment
+    # Compute total cost as a weighted sum of tracking errors
+    rho_position, rho_velocity, rho_attitude, rho_thrust, rho_moment = 1.0, 1.0, 1.0, 1.0, 1.0  # Adjust these weights as needed
+    sim_cost = (rho_position * position_error +
+                  rho_velocity * velocity_error)
 
     return sim_cost
 
@@ -265,7 +279,7 @@ def single_minsnap_instance(world, vehicle, controller, num_waypoints, start_way
     pos_poly = traj.x_poly
     yaw_poly = traj.yaw_poly
 
-    summary_output = np.concatenate((np.array([trajectory_cost]), pos_poly.ravel(), yaw_poly.ravel()))
+    summary_output = np.concatenate((np.array([int(seed)]), np.array([trajectory_cost]), pos_poly.ravel(), yaw_poly.ravel()))
 
     return summary_output
 
@@ -318,7 +332,7 @@ def generate_data(output_csv_file, world, vehicle, controller,
         pool = multiprocessing.Pool(num_cores)
 
         # Use numpy random to generate seeds for each simulation.
-        seeds = np.random.randint(low=0, high=num_simulations, size=num_simulations)
+        seeds = np.random.choice(np.arange(num_simulations), size=num_simulations, replace=False)
 
         manager = multiprocessing.Manager()
         
@@ -364,23 +378,22 @@ def main(num_simulations, parallel_bool, save_trials=False):
     # num_simulations = 10
     # parallel_bool = False
 
-    world_size = 10         # The size of the world.
-    num_waypoints = 4       # Number of waypoints (this is the number of segments plus 1)
-    vavg = 2                # Average speed through the trajectory. 
-    random_yaw = True       # Determines if random yaw is used.
-    yaw_min = -0.85*np.pi   # Minimum yaw angle (remember there is some overshoot in the min snap planner)
-    yaw_max = 0.85*np.pi    # Maximum yaw angle (remember there is some overshooti n the min snap planner)
+    world_size = 10
+    num_waypoints = 4
+    vavg = 2
+    random_yaw = False
+    yaw_min = -0.85*np.pi
+    yaw_max = 0.85*np.pi
 
-    world_buffer = 2        # Ensures that waypoints are sufficiently far enough away from world bounds (to handle overshoot from min snap planner)
-    min_distance = 1                    # The minimum distance between all the waypoints. 
-    max_distance = min_distance+3       # The maximum distance between all the waypoints. 
+    world_buffer = 2
+    min_distance = 1
+    max_distance = min_distance+3
     start_waypoint = None               # If you want to start at a specific waypoint, specify it using [xstart, ystart, zstart]
     end_waypoint = None                 # If you want to end at a specific waypoint, specify it using [xend, yend, zend]
 
     # Create the output file
-    output_csv_file = os.path.dirname(__file__) + '/data.csv'       # Specify the path where the output file will be saved.
+    output_csv_file = os.path.dirname(__file__) + '/data.csv'
 
-    # Code to ensure data isn't accidentally deleted!!
     if os.path.exists(output_csv_file):
         # Ask the user if they want to remove the existing file.
         user_input = input("The file {} already exists. Do you want to remove the existing file? (y/n)".format(output_csv_file))
@@ -411,17 +424,14 @@ def main(num_simulations, parallel_bool, save_trials=False):
     # Append headers to the output file
     with open(output_csv_file, 'w', newline='') as file:
         writer = csv.writer(file)
-        # This depends on the number of waypoints and the order of the polynomial. Currently pos is 7th order and yaw is 7th order, so 8 coefficients each.
-        writer.writerow(['cost'] 
+        # This depends on the number of waypoints and the order of the polynomial. Currently pos is 7th order and yaw is 7th order.
+        writer.writerow(['traj_number'] + ['cost'] 
                 + ['x_poly_seg_{}_coeff_{}'.format(i,j) for i in range(num_waypoints-1) for j in range(8)]
                 + ['y_poly_seg_{}_coeff_{}'.format(i,j) for i in range(num_waypoints-1) for j in range(8)]
                 + ['z_poly_seg_{}_coeff_{}'.format(i,j) for i in range(num_waypoints-1) for j in range(8)]
                 + ['yaw_poly_seg_{}_coeff_{}'.format(i,j) for i in range(num_waypoints-1) for j in range(8)])  
 
     # Now create the world, vehicle, and controller objects.
-    # quad_params['c_Dx'] = 0       # Change the drag coefficient when necessary
-    # quad_params['c_Dy'] = 0       # Change the drag coefficient when necessary
-    # quad_params['c_Dz'] = 0       # Change the drag coefficient when necessary
     world = World.empty([-world_size/2, world_size/2, -world_size/2, world_size/2, -world_size/2, world_size/2])
     vehicle = Multirotor(quad_params)
     controller = SE3Control(quad_params)
@@ -442,4 +452,4 @@ def main(num_simulations, parallel_bool, save_trials=False):
 
 if __name__=="__main__":
 
-    main(num_simulations=150, parallel_bool=True, save_trials=True)
+    main(num_simulations=100, parallel_bool=True, save_trials=True)
