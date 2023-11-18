@@ -267,9 +267,13 @@ def single_minsnap_instance(world, vehicle, controller, num_waypoints, start_way
                               verbose=False)
     
     if save_trial:
-        savepath = os.path.join(os.path.dirname(__file__), 'trial_data')
+        save_path = '/workspace/data_output'
+        savepath = os.path.join(save_path, 'trial_data')
+        # savepath = os.path.join(os.path.dirname(__file__), 'trial_data')
         if not os.path.exists(savepath):
             os.makedirs(savepath)
+        file_path = os.path.join(savepath, 'trial_{}.csv'.format(seed))
+        print("Saving to:", file_path)
         sim_instance.save_to_csv(os.path.join(savepath, 'trial_{}.csv'.format(seed)))
     
     # Compute the cost of the trajectory from result
