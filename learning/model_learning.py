@@ -159,16 +159,16 @@ def train_model(state, data_loader, num_epochs=100):
     :return: state
     """
     # Training loop
-    count = 0
     for epoch in tqdm(range(num_epochs)):
         epoch_loss = 0
         for batch in data_loader:
-            count += 1
             state, loss = train_step(state, batch)
-            # We could use the loss and accuracy for logging here, e.g. in TensorBoard
-            # For simplicity, we skip this part here
+            # Accumulate the loss over the epoch
             epoch_loss += loss
-            writer.add_scalar("Train loss", np.array(epoch_loss), count)
+
+        # Record the epoch loss at the end of the epoch
+        writer.add_scalar('Train loss', np.array(epoch_losss), epoch)
+        
     return state
 
 
