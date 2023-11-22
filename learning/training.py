@@ -310,7 +310,7 @@ def main():
     # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # train_dataset = TrajDataset(file_path=csv_file_path,device=device)
 
-    train_dataset = TrajDataset(file_path=csv_file_path)
+    train_dataset = TrajDataset(file_path=csv_file_path, feature_range=(-1, 1))
     train_data = train_dataset
     print("Training data length: ", len(train_data))
 

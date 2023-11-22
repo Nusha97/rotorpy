@@ -32,19 +32,35 @@ from torch.utils.tensorboard import SummaryWriter
 
 writer = SummaryWriter()
 
+class NormalizeTransform:
+    def __init__(self, min_val, max_val, feature_range=(-1, 1)):
+        self.min_val = min_val
+        self.max_val = max_val
+        self.feature_range = feature_range
+
+    def __call__(self, coeffs):
+        coeffs_normalized = (coeffs - self.min_val) / (self.max_val - self.min_val)
+        if self.feature_range == (0, 1):
+            return coeffs_normalized
+        elif self.feature_range == (-1, 1):
+            return 2 * coeffs_normalized - 1
+        else:
+            raise ValueError("Unsupported feature range. Use (0, 1) or (-1, 1).")
+
 
 class TrajDataset(Dataset):
     """
     Dataset class inherited from torch modules
     """
     # def __init__(self, file_path, device=torch.device('cpu'), transform=None, target_transform=None):
-    def __init__(self, file_path, transform=None, target_transform=None):
+    def __init__(self, file_path, input_transform=None, target_transform=None, feature_range=(-1, 1)):
         """
         Creating the dataset class for our pipeline
         :param file_path: path of csv file
         :param costs: an array containing the costs for each trajectory
-        :param transform: function to transform the coefficient data, if needed
+        :param input_transform: function to transform the coefficient data, if needed
         :param target_transform: function to transform the costs such as normalization, if needed
+        :param feature_range: normalize inputs -> (-1,1) or(0,1)
         """
         self.data = np.loadtxt(file_path,delimiter=",",skiprows=1,)
 
@@ -54,7 +70,12 @@ class TrajDataset(Dataset):
         # self.coeffs = torch.tensor(self.data[:, 2:], dtype=torch.float32, device=device)
         # self.costs = torch.tensor(self.data[:, 1], dtype=torch.float32, device=device)
 
-        self.transform = transform
+        # Get the global min and max for the entire dataset
+        self.global_min = np.min(self.coeffs)
+        self.global_max = np.max(self.coeffs)
+
+        # The transform provided in the arguments is now a class that will handle normalization
+        self.input_transform = NormalizeTransform(self.global_min, self.global_max, feature_range)
         self.target_transform = target_transform
         
 
@@ -69,8 +90,8 @@ class TrajDataset(Dataset):
         # The rest of the columns are coefficients: x_poly_seg_0_coeff_0,x_poly_seg_0_coeff_1, ..., yaw_poly_seg_2_coeff_7
         coeffs = self.coeffs[idx]
         cost = self.costs[idx]
-        # if self.transform:
-        #     coeffs = self.transform(coeffs)
+        # if self.input_transform:
+        #     coeffs = self.input_transform(coeffs)
         # if self.target_transform:
             # cost = self.target_transform(cost)
 
@@ -167,7 +188,7 @@ def train_model(state, data_loader, num_epochs=100):
             epoch_loss += loss
 
         # Record the epoch loss at the end of the epoch
-        writer.add_scalar('Train loss', np.array(epoch_losss), epoch)
+        writer.add_scalar('Train loss', np.array(epoch_loss), epoch)
         
     return state
 
