@@ -17,7 +17,9 @@ import torch.utils.data as data
 from flax.training import train_state
 import optax
 import jax
-from mlp import MLP
+from mlp_jax import MLP
+# import pandas as pd
+import torch
 
 # import tf
 import transforms3d.euler as euler
@@ -205,20 +207,20 @@ def main():
     # sim_data = load_bag("/home/anusha/2023-02-27-13-35-15.bag")
     # sim_data = load_bag("/home/anusha/dragonfly1-2023-04-12-12-18-27.bag")
     ### Load the csv file here with header
-    sim_data = np.loadtxt(
-        "/home/mrsl_guest/rotorpy/rotorpy/rotorpy/data_out/sim_airdrag_yawmixed_4000_20230913_203728.csv",
-        delimiter=",",
-        skiprows=1,
-    )
-
-    # no need times
-    ref_traj, actual_traj, input_traj, cost_traj, times = compute_traj(
-        sim_data=sim_data, rho=rho, horizon=horizon
-    )
+    # cost_coeff_data = np.loadtxt(
+    #     "/workspace/data_output/data.csv",
+    #     delimiter=",",
+    #     skiprows=1,
+    # )
+        
+    # # no need times
+    # ref_traj, actual_traj, input_traj, cost_traj, times = compute_traj(
+    #     sim_data=sim_data, rho=rho, horizon=horizon
+    # )
 
     with open(
         # r"/home/anusha/Research/ws_kr/src/layered_ref_control/src/layered_ref_control/data/params.yaml"
-        r"/home/mrsl_guest/rotorpy/rotorpy/learning/params.yaml"
+        r"/workspace/rotorpy/learning/params.yaml"
     ) as f:
         yaml_data = yaml.load(f, Loader=yaml.RoundTripLoader)
 
@@ -228,7 +230,7 @@ def main():
     num_epochs = yaml_data["num_epochs"]
     model_save = yaml_data["save_path"] + str(rho)
     # Construct augmented states
-
+    """
     cost_traj = cost_traj.ravel()
     # # exp_log_cost_traj into cost_traj
     # cost_traj = np.exp(cost_traj)
@@ -284,15 +286,34 @@ def main():
     Tstart = 0
     Tend = aug_state.shape[0]
 
-    train_dataset = TrajDataset(
-        aug_state[Tstart:Tend, :].astype("float64"),
-        input_traj[Tstart:Tend, :].astype("float64"),
-        cost_traj[Tstart:Tend, None].astype("float64"),
-        aug_state[Tstart:Tend, :].astype("float64"),
-    )
+    p = aug_state.shape[1]
+    q = 4
 
+    print(aug_state.shape)
+    """
+    # Path to your CSV file
+    csv_file_path = "/workspace/data_output/data.csv"
+    # cost_coeff_data = np.loadtxt(
+    #     "/workspace/data_output/data.csv",
+    #     delimiter=",",
+    #     skiprows=1,
+    # )
+
+    # # Read the CSV file
+    # df = pd.read_csv(csv_file_path)
+
+    # # Assuming the first column is 'traj_number' and the second column is 'cost'
+    # # and the rest of the columns are coefficients
+    # number_of_coefficients = len(df.columns) - 2  # Subtracting the non-coefficient columns
+    # print("Number of coefficients:", number_of_coefficients)
+
+    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # train_dataset = TrajDataset(file_path=csv_file_path,device=device)
+
+    train_dataset = TrajDataset(file_path=csv_file_path)
     train_data = train_dataset
     print("Training data length: ", len(train_data))
+
     """
     # Split the dataset into training and testing subsets
     train_data, test_data = train_test_split(
@@ -304,11 +325,10 @@ def main():
     print("Training data length: ", len(train_data))
     print("Testing data length: ", len(test_data))
     """
-
-    p = aug_state.shape[1]
-    q = 4
-
-    print(aug_state.shape)
+    # Initialize the model
+    number_of_coefficients = train_dataset.num_coefficients()
+    p = number_of_coefficients  # Set this to the number of coefficients in your dataset
+    print("Number of coefficients:", number_of_coefficients)
 
     model = MLP(num_hidden=num_hidden, num_outputs=1)
     # Printing the model shows its attributes
@@ -346,10 +366,17 @@ def main():
     out = []
     true = []
     for batch in train_data_loader:
-        print("batch", batch)
-        data_input, _, cost, _ = batch
-        out.append(trained_model(data_input))
+        data_coeffs, cost = batch  # Unpack the batch into coefficients and cost
+        predicted_cost = trained_model(data_coeffs)  # Get model predictions
+        out.append(predicted_cost)
         true.append(cost)
+
+    # for batch in train_data_loader:
+    #     print("batch", batch)
+    #     data_input, _, cost, _ = batch
+    #     out.append(trained_model(data_input))
+    #     true.append(cost)
+
         # print("Cost", cost)
         # print("Predicted", trained_model(data_input))
 

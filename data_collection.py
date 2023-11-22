@@ -22,6 +22,7 @@ import datetime
 """
 Functions for generating instances of RotorPy for data collection. 
 """
+save_path = '/workspace/data_output'
 
 def sample_waypoints(num_waypoints, world, world_buffer=2, check_collision=True, min_distance=1, max_distance=3, max_attempts=1000, start_waypoint=None, end_waypoint=None):
     """
@@ -267,7 +268,6 @@ def single_minsnap_instance(world, vehicle, controller, num_waypoints, start_way
                               verbose=False)
     
     if save_trial:
-        save_path = '/workspace/data_output'
         savepath = os.path.join(save_path, 'trial_data')
         # savepath = os.path.join(os.path.dirname(__file__), 'trial_data')
         if not os.path.exists(savepath):
@@ -396,7 +396,8 @@ def main(num_simulations, parallel_bool, save_trials=False):
     end_waypoint = None                 # If you want to end at a specific waypoint, specify it using [xend, yend, zend]
 
     # Create the output file
-    output_csv_file = os.path.dirname(__file__) + '/data.csv'
+    # output_csv_file = os.path.dirname(__file__) + '/data.csv'
+    output_csv_file = os.path.join(save_path, 'data.csv')
 
     if os.path.exists(output_csv_file):
         # Ask the user if they want to remove the existing file.
@@ -410,7 +411,8 @@ def main(num_simulations, parallel_bool, save_trials=False):
             raise Exception("Invalid input. Please enter 'y' or 'n'.")
 
     if save_trials:
-        savepath = os.path.join(os.path.dirname(__file__), 'trial_data')
+        # savepath = os.path.join(os.path.dirname(__file__), 'trial_data')
+        savepath = os.path.join(save_path, 'trial_data')
         if not os.path.exists(savepath):
             os.makedirs(savepath)
         else:
@@ -456,4 +458,4 @@ def main(num_simulations, parallel_bool, save_trials=False):
 
 if __name__=="__main__":
 
-    main(num_simulations=100, parallel_bool=True, save_trials=True)
+    main(num_simulations=1000000, parallel_bool=True, save_trials=True)
