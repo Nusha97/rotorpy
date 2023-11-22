@@ -18,16 +18,16 @@ from flax import linen as nn
 
 
 class MLP(nn.Module):
-    num_hidden: list
-    num_outputs: int
+    num_hidden: list  # List of numbers indicating the number of neurons in each hidden layer
+    num_outputs: int  # Number of neurons in the output layer
 
-    def setup(self):
-        self.linear = [nn.Dense(features=self.num_hidden[i]) for i in range(len(self.num_hidden))]
-        self.linear2 = nn.Dense(features=self.num_outputs)
-
+    @nn.compact
     def __call__(self, x):
-        for i in range(len(self.num_hidden)):
-            x = self.linear[i](x)
-            x = nn.elu(x)
-        x = self.linear2(x)
+        # Define the hidden layers
+        for hidden_units in self.num_hidden:
+            x = nn.Dense(features=hidden_units)(x)  # Create a dense layer with the specified number of units
+            x = nn.relu(x)  # Apply the ReLU activation function
+
+        # Define the output layer
+        x = nn.Dense(features=self.num_outputs)(x)  # Create the output dense layer
         return x
