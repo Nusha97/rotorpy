@@ -311,10 +311,9 @@ def main():
     # train_dataset = TrajDataset(file_path=csv_file_path,device=device)
 
     train_dataset = TrajDataset(file_path=csv_file_path, feature_range=(-1, 1))
-    train_data = train_dataset
-    print("Training data length: ", len(train_data))
+    # train_data = train_dataset
+    # print("Training data length: ", len(train_data))
 
-    """
     # Split the dataset into training and testing subsets
     train_data, test_data = train_test_split(
         train_dataset,
@@ -324,7 +323,7 @@ def main():
 
     print("Training data length: ", len(train_data))
     print("Testing data length: ", len(test_data))
-    """
+
     # Initialize the model
     number_of_coefficients = train_dataset.num_coefficients()
     p = number_of_coefficients  # Set this to the number of coefficients in your dataset
@@ -359,7 +358,7 @@ def main():
     eval_model(trained_model_state, train_data_loader, batch_size)
 
     trained_model = model.bind(trained_model_state.params)
-    # TODO: save checkpoint
+    # save checkpoint
     save_checkpoint(trained_model_state, model_save, 7)
 
     # Save plot on entire test dataset
@@ -368,23 +367,48 @@ def main():
     for batch in train_data_loader:
         data_coeffs, cost = batch  # Unpack the batch into coefficients and cost
         predicted_cost = trained_model(data_coeffs)  # Get model predictions
-        out.append(predicted_cost)
-        true.append(cost)
-
-    # for batch in train_data_loader:
-    #     print("batch", batch)
-    #     data_input, _, cost, _ = batch
-    #     out.append(trained_model(data_input))
-    #     true.append(cost)
+        # out.append(predicted_cost)
+        # true.append(cost)
+        # print("predicted_cost shape:", predicted_cost.shape)
+        # print("cost shape:", cost.shape)
+        
+        out.append(predicted_cost.reshape(-1, 1))  # Reshape to ensure consistent dimension
+        true.append(cost.reshape(-1, 1))  # Reshape to ensure consistent dimension
+        
 
         # print("Cost", cost)
-        # print("Predicted", trained_model(data_input))
+        # print("predicted_cost", predicted_cost)
 
     print("out's shape", len(out))
     out = np.vstack(out)
     print("out's shape", out.shape)
     true = np.vstack(true)
 
+    ## Plotting and saving trajectories for each trial file
+    plots_dir = '/workspace/data_output/plots_train/'
+    rho_value = str(rho)  # Assuming rho is a variable you've defined earlier
+
+    # Plotting the histogram of errors
+    # Assuming 'out' is your predictions and 'true' is the actual values
+    errors = np.linalg.norm(true - out, axis=1)  # Calculate the L2 norm of the errors
+
+    # Plotting the histogram of errors
+    plt.figure()
+    plt.hist(errors, bins=50, alpha=0.75, color='blue')  # Adjust bins as needed
+    plt.xlabel('Error (L2 norm of actual - predictions)')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Prediction Errors')
+    plt.grid(True)
+
+    # Save the histogram
+    plots_dir = '/workspace/data_output/plots_train/'
+    rho_value = str(rho)  # Assuming rho is a variable you've defined earlier
+    file_name = plots_dir + rho_value + '_error_hist_train.png'
+    plt.savefig(file_name)
+
+    # Show the plot
+    plt.show()
+    """
     # scatter plot
     plt.figure()
     plt.scatter(range(len(out)), out.ravel(), color="b", label="Predictions")
@@ -393,7 +417,10 @@ def main():
     plt.ylabel("Cost")
     plt.legend()
     plt.title("Predicted vs Actual - Training Dataset")
-    # plt.savefig("./plots/inference"+str(rho)+".png")
+    file_name = plots_dir + rho_value + '_train_actual_pred.png'
+
+    # After your plotting code
+    plt.savefig(file_name)    
     plt.show()
     # plt.figure()
     # plt.scatter(range(len(out)), out.ravel(), color="b", label="Predictions")
@@ -423,6 +450,10 @@ def main():
     plt.legend()
     plt.title("Actual - Training Dataset")
     # Set the y-axis range from 0 to 500
+    file_name = plots_dir + rho_value + '_train_actual.png'
+
+    # After your plotting code
+    plt.savefig(file_name) 
     plt.show()
 
     # Two boxplots
@@ -431,61 +462,14 @@ def main():
     plt.xlabel("Trajectory Index")
     plt.ylabel("Cost")
     plt.title("Predicted vs Actual - Train Dataset")
+    file_name = plots_dir + rho_value + '_train_actual_pred_box.png'
+
+    # After your plotting code
+    plt.savefig(file_name) 
     plt.show()
     """
-    # test on 2nd dataset
-    # inf_data = load_bag("/home/anusha/dragonfly2-2023-04-12-12-18-27.bag")
-    # ref_traj, actual_traj, input_traj, cost_traj, times = compute_traj(
-    #     inf_data, "dragonfly2", "/home/anusha/min_jerk_times.pkl", rho
-    # )
-    # inf_data.close()
-
-    ### Load the csv file here with header
-    inf_data = np.loadtxt(
-        "/home/mrsl_guest/Desktop/dragonfly2.csv", delimiter=",", skiprows=1
-    )
-    # no need times
-    ref_traj, actual_traj, input_traj, cost_traj, times = compute_traj(
-        sim_data, 1, horizon, False
-    )
-
-    # # Construct augmented states
-    # horizon = 300
-    # gamma = 1
-
-    # idx = [0, 1, 2, 12]
-
-    cost_traj = cost_traj.ravel()
-
-    num_traj = int(len(ref_traj) / horizon)
-
-    # Create augmented state
-
-    aug_state = []
-    for i in range(num_traj):
-        r0 = ref_traj[i * horizon : (i + 1) * horizon, :]
-        act = actual_traj[i * horizon : (i + 1) * horizon, :]
-        aug_state.append(np.append(act[0, :], r0))
-
-    aug_state = np.array(aug_state)
-    print(aug_state.shape)
-
-    Tstart = 0
-    Tend = aug_state.shape[0]
-
-    test_dataset = TrajDataset(
-        aug_state[Tstart : Tend - 1, :].astype("float64"),
-        input_traj[Tstart : Tend - 1, :].astype("float64"),
-        cost_traj[Tstart : Tend - 1, None].astype("float64"),
-        aug_state[Tstart + 1 : Tend, :].astype("float64"),
-    )
-
-    test_data_loader = data.DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False, collate_fn=numpy_collate
-    )
-    """
     # Evaluation of test and train dataset
-    """
+    
     test_data_loader = data.DataLoader(
         test_data, batch_size=batch_size, shuffle=False, collate_fn=numpy_collate
     )
@@ -496,9 +480,15 @@ def main():
     out = []
     true = []
     for batch in test_data_loader:
-        data_input, _, cost, _ = batch
-        out.append(trained_model(data_input))
-        true.append(cost)
+        data_coeffs, cost = batch  # Unpack the batch into coefficients and cost
+        predicted_cost = trained_model(data_coeffs)  # Get model predictions
+        # out.append(predicted_cost)
+        # true.append(cost)
+        # print("predicted_cost shape:", predicted_cost.shape)
+        # print("cost shape:", cost.shape)
+        out.append(predicted_cost.reshape(-1, 1))  # Reshape to ensure consistent dimension
+        true.append(cost.reshape(-1, 1))  # Reshape to ensure consistent dimension
+                
 
     out = np.vstack(out)
     true = np.vstack(true)
@@ -506,6 +496,28 @@ def main():
     print(out.shape)
     print(true.shape)
 
+    ## histogram of errors
+    # Assuming 'out' is your predictions and 'true' is the actual values
+    errors = np.linalg.norm(true - out, axis=1)  # Calculate the L2 norm of the errors
+
+    # Plotting the histogram of errors
+    plt.figure()
+    plt.hist(errors, bins=50, alpha=0.75, color='blue')  # Adjust bins as needed
+    plt.xlabel('Error (L2 norm of actual - predictions)')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Prediction Errors')
+    plt.grid(True)
+
+    # Save the histogram
+    plots_dir = '/workspace/data_output/plots_train/'
+    rho_value = str(rho)  # Assuming rho is a variable you've defined earlier
+    file_name = plots_dir + rho_value + '_error_hist_test.png'
+    plt.savefig(file_name)
+
+    # Show the plot
+    plt.show()
+
+    """
     # scatter plot
     plt.figure()
     plt.scatter(range(len(out)), out.ravel(), color="b", label="Predictions")
@@ -517,6 +529,10 @@ def main():
     plt.legend()
     plt.title("Predicted vs Actual - Test Dataset")
     # plt.savefig("./plots/inference"+str(rho)+".png")
+    file_name = plots_dir + rho_value + '_test_actual_pred.png'
+
+    # After your plotting code
+    plt.savefig(file_name) 
     plt.show()
 
     # # line plot
@@ -536,10 +552,14 @@ def main():
     plt.xlabel("Trajectory Index")
     plt.ylabel("Cost")
     plt.title("Predicted vs Actual - Test Dataset")
-    plt.show()
+    file_name = plots_dir + rho_value + '_test_actual_pred_plot.png'
 
-    # eval_model(trained_model_state, test_data_loader, batch_size)
+    # After your plotting code
+    plt.savefig(file_name) 
+    plt.show()
     """
+    # eval_model(trained_model_state, test_data_loader, batch_size)
+    
 
 
 if __name__ == "__main__":

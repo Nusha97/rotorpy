@@ -230,8 +230,8 @@ def save_checkpoint(state, workdir, step=0):
     :param step: checkpoint index
     :return: None
     """
-    checkpoints.save_checkpoint(workdir, state, step)
-    # checkpoints.save_checkpoint(workdir, state, step, overwrite=True, keep=2)
+    # checkpoints.save_checkpoint(workdir, state, step)
+    checkpoints.save_checkpoint(workdir, state, step, overwrite=True, keep=2)
 
 
 
