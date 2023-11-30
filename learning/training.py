@@ -292,7 +292,7 @@ def main():
     print(aug_state.shape)
     """
     # Path to your CSV file
-    csv_file_path = "/workspace/data_output/data.csv"
+    csv_file_path = "/workspace/data_output/data_old.csv"
     # cost_coeff_data = np.loadtxt(
     #     "/workspace/data_output/data.csv",
     #     delimiter=",",
@@ -361,6 +361,10 @@ def main():
     # save checkpoint
     save_checkpoint(trained_model_state, model_save, 7)
 
+    num_batches = len(train_data_loader)
+    print('Number of batches:', num_batches)
+    print('Expected number of batches:', np.ceil(100000 / batch_size))  # Assuming batch_size is the size of each batch
+
     # Save plot on entire test dataset
     out = []
     true = []
@@ -383,6 +387,7 @@ def main():
     out = np.vstack(out)
     print("out's shape", out.shape)
     true = np.vstack(true)
+    print("true's shape", true.shape)
 
     ## Plotting and saving trajectories for each trial file
     plots_dir = '/workspace/data_output/plots_train/'
@@ -397,7 +402,7 @@ def main():
     plt.hist(errors, bins=50, alpha=0.75, color='blue')  # Adjust bins as needed
     plt.xlabel('Error (L2 norm of actual - predictions)')
     plt.ylabel('Frequency')
-    plt.title('Histogram of Prediction Errors')
+    plt.title('Histogram of Prediction Errors in Training Data')
     plt.grid(True)
 
     # Save the histogram
@@ -405,9 +410,55 @@ def main():
     rho_value = str(rho)  # Assuming rho is a variable you've defined earlier
     file_name = plots_dir + rho_value + '_error_hist_train.png'
     plt.savefig(file_name)
+    plt.close()  # Close the plot
+    # # Show the plot
+    # plt.show()
 
-    # Show the plot
-    plt.show()
+    # Calculate the percentage error relative to the true cost
+    # Avoid division by zero by adding a small epsilon where true cost is zero
+    epsilon = 1e-8
+    true_flat = true.flatten()  # Flatten to ensure it is one-dimensional
+    percentage_errors = (errors / (true_flat + epsilon)) * 100
+
+    # Assuming 'percentage_errors' is the array containing your percentage error data.
+
+    # Define the range and number of bins for the histogram
+    error_range = (0, 100)  # Focus on errors between 0% and 100%
+    number_of_bins = 200    # Increase the number of bins for more granularity
+
+    # Define tick marks for the x-axis
+    ticks = np.arange(error_range[0], error_range[1]+1, 5)  # Create ticks every 5%
+
+    # Plot histogram of the actual cost values
+    plt.figure()
+    plt.hist(true, bins=50, alpha=0.75, color='blue')
+    plt.xlabel('Cost Values')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Cost Values in Training Data')
+    plt.grid(True)
+
+    # Save the histogram of cost values
+    cost_hist_file_name = plots_dir + rho_value + '_cost_values_hist_train.png'
+    plt.savefig(cost_hist_file_name)
+    plt.close()  # Close the plot
+
+    # Plot histogram of the percentage errors
+    plt.figure(figsize=(10, 6))
+    plt.hist(percentage_errors, bins=number_of_bins, range=error_range, alpha=0.75, color='green')
+    plt.xlabel('Percentage Error (%)')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Percentage Errors Relative to True Cost in Training Data')
+    plt.xticks(ticks)  # Set the ticks on the x-axis
+    plt.xlim(error_range)  # Zoom in on the [0, 100] range on the x-axis
+    plt.grid(True)
+    plt.tight_layout()  # Adjust the layout to fit the figure nicely
+
+    # Save the histogram of percentage errors
+    error_hist_file_name = plots_dir + rho_value + '_percentage_error_hist_train.png'
+    plt.savefig(error_hist_file_name)
+    plt.close()  # Close the plot
+
+
     """
     # scatter plot
     plt.figure()
@@ -477,35 +528,35 @@ def main():
     eval_model(trained_model_state, test_data_loader, batch_size)
 
     # Save plot on entire test dataset
-    out = []
-    true = []
+    out_test = []
+    true_test = []
     for batch in test_data_loader:
         data_coeffs, cost = batch  # Unpack the batch into coefficients and cost
         predicted_cost = trained_model(data_coeffs)  # Get model predictions
-        # out.append(predicted_cost)
-        # true.append(cost)
+        # out_test.append(predicted_cost)
+        # true_test.append(cost)
         # print("predicted_cost shape:", predicted_cost.shape)
         # print("cost shape:", cost.shape)
-        out.append(predicted_cost.reshape(-1, 1))  # Reshape to ensure consistent dimension
-        true.append(cost.reshape(-1, 1))  # Reshape to ensure consistent dimension
+        out_test.append(predicted_cost.reshape(-1, 1))  # Reshape to ensure consistent dimension
+        true_test.append(cost.reshape(-1, 1))  # Reshape to ensure consistent dimension
                 
 
-    out = np.vstack(out)
-    true = np.vstack(true)
+    out_test = np.vstack(out_test)
+    true_test = np.vstack(true_test)
 
-    print(out.shape)
-    print(true.shape)
+    print(out_test.shape)
+    print(true_test.shape)
 
     ## histogram of errors
-    # Assuming 'out' is your predictions and 'true' is the actual values
-    errors = np.linalg.norm(true - out, axis=1)  # Calculate the L2 norm of the errors
+    # Assuming 'out_test' is your predictions and 'true_test' is the actual values
+    errors = np.linalg.norm(true_test - out_test, axis=1)  # Calculate the L2 norm of the errors
 
     # Plotting the histogram of errors
     plt.figure()
     plt.hist(errors, bins=50, alpha=0.75, color='blue')  # Adjust bins as needed
     plt.xlabel('Error (L2 norm of actual - predictions)')
     plt.ylabel('Frequency')
-    plt.title('Histogram of Prediction Errors')
+    plt.title('Histogram of Prediction Errors in Test Data')
     plt.grid(True)
 
     # Save the histogram
@@ -513,10 +564,70 @@ def main():
     rho_value = str(rho)  # Assuming rho is a variable you've defined earlier
     file_name = plots_dir + rho_value + '_error_hist_test.png'
     plt.savefig(file_name)
+    plt.close()  # Close the plot
 
-    # Show the plot
-    plt.show()
+    # # Show the plot
+    # plt.show()
 
+    # Calculate the percentage error relative to the true cost
+    true_test_flat = true_test.flatten()  # Flatten to ensure it is one-dimensional
+    percentage_errors = (errors / (true_test_flat + epsilon)) * 100
+
+
+    # Plot histogram of the actual cost values
+    plt.figure()
+    plt.hist(true_test, bins=50, alpha=0.75, color='blue')
+    plt.xlabel('Cost Values')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Cost Values in Test Data')
+    plt.grid(True)
+
+    # Save the histogram of cost values
+    cost_hist_file_name = plots_dir + rho_value + '_cost_values_hist_test.png'
+    plt.savefig(cost_hist_file_name)
+    plt.close()  # Close the plot
+
+    # Plot histogram of the percentage errors
+    plt.figure(figsize=(10, 6))
+    plt.hist(percentage_errors, bins=number_of_bins, range=error_range, alpha=0.75, color='green')
+    plt.xlabel('Percentage Error (%)')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Percentage Errors Relative to True Cost in Test Data')
+    plt.xticks(ticks)  # Set the ticks on the x-axis
+    plt.xlim(error_range)  # Zoom in on the [0, 100] range on the x-axis
+    plt.grid(True)
+    plt.tight_layout()  # Adjust the layout to fit the figure nicely
+
+    # Save the histogram of percentage errors
+    error_hist_file_name = plots_dir + rho_value + '_percentage_error_hist_test.png'
+    plt.savefig(error_hist_file_name)
+    plt.close()  # Close the plot
+
+    # Convert everything to one-dimensional arrays for plotting
+    out_flat = out.flatten()
+    out_test_flat = out_test.flatten()
+
+    # Scatter plot of predicted vs. true cost
+    plt.figure(figsize=(10, 8))
+    plt.scatter(out_flat, true_flat, alpha=0.5, color='blue', s=2, label='Training Data')
+    plt.scatter(out_test_flat, true_test_flat, alpha=0.5, color='green', s=2, label='Test Data')
+
+    # Plot y=x line indicating perfect predictions
+    max_cost = max(true_flat.max(), out_flat.max(), true_test_flat.max(), out_test_flat.max())
+    plt.plot([0, max_cost], [0, max_cost], 'r--', label='Perfect Prediction')
+
+    plt.xlabel('Predicted Cost')
+    plt.ylabel('True Cost')
+    plt.title('Predicted vs. True Cost for Training and Test Data')
+    plt.legend()
+    plt.grid(True)
+    plt.axis('equal')
+    plt.tight_layout()
+
+    # Save the scatter plot
+    scatter_plot_file_name = plots_dir + rho_value + '_predicted_vs_true_cost.png'
+    plt.savefig(scatter_plot_file_name)
+    plt.close()
     """
     # scatter plot
     plt.figure()
