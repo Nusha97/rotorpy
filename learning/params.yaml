@@ -1,5 +1,5 @@
 num_hidden: [100, 100, 20]
 batch_size: 256
 learning_rate: 0.001
-num_epochs: 100
+num_epochs: 1000
 save_path: "/workspace/data_output/rho-"
