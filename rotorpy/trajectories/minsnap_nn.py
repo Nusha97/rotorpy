@@ -359,6 +359,12 @@ class MinSnap(object):
             c_opt_y = cvxopt_solve_qp(P_pos, q=q_pos, G=Gy, h=hy, A=Ay, b=by)
             c_opt_z = cvxopt_solve_qp(P_pos, q=q_pos, G=Gz, h=hz, A=Az, b=bz)
             c_opt_yaw = cvxopt_solve_qp(P_yaw, q=q_yaw, G=Gyaw, h=hyaw, A=Ayaw, b=byaw)
+            # # print the number of coeffs
+            # print("Number of Coefficients for each trajectory dimension:")
+            # print(f"X-axis: {len(c_opt_x)} coefficients")
+            # print(f"Y-axis: {len(c_opt_y)} coefficients")
+            # print(f"Z-axis: {len(c_opt_z)} coefficients")
+            # print(f"Yaw: {len(c_opt_yaw)} coefficients")
         
             # call modify_reference directly after computing the min snap coeffs and use the returned coeffs in the rest of the class
             if use_neural_network:

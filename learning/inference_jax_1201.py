@@ -285,9 +285,9 @@ def main():
     times_poly = []
 
     # Initialize neural network
-    rho = 0.1
-    input_size = 2012  # order of
-    num_data = 72
+    rho = 1
+    input_size = 96  # number of coeff
+    # num_data = 72
 
     with open(r"/workspace/rotorpy/learning/params.yaml") as f:
         yaml_data = yaml.load(f, Loader=yaml.RoundTripLoader)
@@ -317,7 +317,13 @@ def main():
 
     model_save = yaml_data["save_path"] + str(rho)
     print("model_save", model_save)
+    
+    # print("Current model structure:", model)
+    # print("Model parameters:", params)
 
+    # # Verify the path to the checkpoint
+    # print("Checkpoint path:", model_save)
+    
     trained_model_state = restore_checkpoint(model_state, model_save)
 
     vf = model.bind(trained_model_state.params)
