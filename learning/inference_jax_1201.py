@@ -40,7 +40,7 @@ import time
 from rotorpy.utils.occupancy_map import OccupancyMap
 from rotorpy.controllers.quadrotor_control import SE3Control
 from rotorpy.vehicles.multirotor import Multirotor
-from rotorpy.trajectories.minsnap import MinSnap
+from rotorpy.trajectories.minsnap_nn import MinSnap
 from rotorpy.vehicles.crazyflie_params import quad_params
 from rotorpy.environments import Environment
 from rotorpy.world import World
@@ -285,7 +285,7 @@ def main():
     times_poly = []
 
     # Initialize neural network
-    rho = 1
+    rho = 0.1
     input_size = 2012  # order of
     num_data = 72
 
