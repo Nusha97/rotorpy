@@ -226,10 +226,7 @@ def compute_cost(sim_result):
     return sim_cost
 
 # Function to run simulation and compute cost
-def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_network, regularizer=None):
-    vehicle = Multirotor(quad_params)
-    controller = SE3Control(quad_params)
-
+def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_network, regularizer=None, vehicle=None, controller=None):
     traj = MinSnap(points=waypoints, yaw_angles=yaw_angles, v_avg=vavg, use_neural_network=use_neural_network, regularizer=regularizer)
 
     sim_instance = Environment(vehicle=vehicle, controller=controller, trajectory=traj, wind_profile=None, sim_rate=100)
@@ -346,49 +343,46 @@ def main():
     world = World.empty([-world_size/2, world_size/2, -world_size/2, world_size/2, -world_size/2, world_size/2])
     vehicle = Multirotor(quad_params)
     controller = SE3Control(quad_params)
-    # Sample waypoints
-    waypoints = sample_waypoints(num_waypoints=num_waypoints, world=world, world_buffer=world_buffer, 
-                                     min_distance=min_distance, max_distance=max_distance, 
-                                     start_waypoint=start_waypoint, end_waypoint=end_waypoint)
-    
-    # Sample yaw angles
-    yaw_angles = sample_yaw(seed=427, waypoints=waypoints, yaw_min=yaw_min, yaw_max=yaw_max)
 
-    # /workspace/rotorpy/rotorpy/sim_figures/
-    figure_path = "/workspace/rotorpy/rotorpy/sim_figures/"
-
-    # visualize the waypoints
-    fig = plt.figure()
-    axes = fig.add_subplot(111, projection="3d")
-    axes.plot3D(
-        waypoints[:, 0],
-        waypoints[:, 1],
-        waypoints[:, 2],
-        "*",
-    )
-    axes.set_xlim(-6, 6)
-    axes.set_zlim(0, 1)
-    axes.set_ylim(-6, 6)
-    plt.savefig(figure_path + "waypoints.png")
-
-    # run simulation and compute cost for the initial trajectory
-    sim_result_init, trajectory_cos_init = run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_network=False, regularizer=None)
-    print("trajectory_cost_init", trajectory_cos_init)
+    # Loop for 100 trajectories
+    for i in range(100):
+        # Sample waypoints
+        waypoints = sample_waypoints(num_waypoints=num_waypoints, world=world, world_buffer=world_buffer, 
+                                        min_distance=min_distance, max_distance=max_distance, 
+                                        start_waypoint=start_waypoint, end_waypoint=end_waypoint)
         
-    # generate min_snap trajectory and run simulation
-    fname_minsnap = f"init_{rho}"
+        # Sample yaw angles
+        yaw_angles = sample_yaw(seed=427, waypoints=waypoints, yaw_min=yaw_min, yaw_max=yaw_max)
 
-    # Plotting the results of sim_result['state']['x'] and sim_result['flat']['x'] shows the actual trajectory and the reference trajectory
-    plot_results(sim_result_init, filename=figure_path + fname_minsnap + ".png")
-    
-    # run simulation and compute cost for the modified trajectory
-    sim_result_nn, trajectory_cost_nn = run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_network=True, regularizer=vf)
-    print("trajectory_cost_nn", trajectory_cost_nn)
+        # /workspace/rotorpy/rotorpy/sim_figures/
+        figure_path = "/workspace/rotorpy/rotorpy/sim_figures/"
 
-    fname_nn = f"nn_modified_{rho}"
+        # visualize the waypoints
+        fig = plt.figure()
+        axes = fig.add_subplot(111, projection="3d")
+        axes.plot3D(
+            waypoints[:, 0],
+            waypoints[:, 1],
+            waypoints[:, 2],
+            "*",
+        )
+        axes.set_xlim(-6, 6)
+        axes.set_zlim(0, 1)
+        axes.set_ylim(-6, 6)
+        plt.savefig(figure_path + "waypoints.png")
 
-    plot_results(sim_result_nn, filename=figure_path + fname_nn + ".png")
+        # run simulation and compute cost for the initial trajectory
+        sim_result_init, trajectory_cost_init = run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller)
+        print(f"Trajectory {i} initial cost: {trajectory_cost_init}")
+            
+        # generate min_snap trajectory and run simulation
+        plot_results(sim_result_init, filename=f"{figure_path}init_traj_{i}.png")
 
+        # run simulation and compute cost for the modified trajectory
+        sim_result_nn, trajectory_cost_nn = run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_network=True, regularizer=vf, vehicle=vehicle, controller=controller)
+        print(f"Trajectory {i} neural network modified cost: {trajectory_cost_nn}")
+
+        plot_results(sim_result_nn, filename=f"{figure_path}nn_modified_traj_{i}.png")
 
 
     """
