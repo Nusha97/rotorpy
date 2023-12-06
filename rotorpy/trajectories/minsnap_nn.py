@@ -369,6 +369,8 @@ class MinSnap(object):
             # print(f"Yaw: {len(c_opt_yaw)} coefficients")
         
             # call modify_reference directly after computing the min snap coeffs and use the returned coeffs in the rest of the class
+            self.nan_encountered = False
+
             if use_neural_network:
                 min_snap_coeffs = np.concatenate([c_opt_x, c_opt_y, c_opt_z, c_opt_yaw])
 
@@ -389,25 +391,28 @@ class MinSnap(object):
                 b = np.concatenate((bx, by, bz, byaw))
                 
                 ### minsnap ######## jax  ####
-                nn_coeff, pred = sgd_jax.modify_reference(
+                nn_coeff, pred, nan_encountered = sgd_jax.modify_reference(
                     regularizer,
                     H,
                     A,
                     b,
                     min_snap_coeffs
                 )
+
+                self.nan_encountered = nan_encountered  # Update the value
                 ### minsnap ######## jax  ####
 
                 ### minsnap ######## torch  ####
                 # nn_coeff, pred = nonlinear.modify_reference(
-                c_opt_x = nn_coeff[0 : ((poly_degree + 1) * m)]
-                c_opt_y = nn_coeff[
-                    ((poly_degree + 1) * m) : (2 * (poly_degree + 1) * m)
-                ]
-                c_opt_z = nn_coeff[
-                    (2 * (poly_degree + 1) * m) : (3 * (poly_degree + 1) * m)
-                ]
-                c_opt_yaw = nn_coeff[(3 * (poly_degree + 1) * m) :]
+                if nan_encountered == False:
+                    c_opt_x = nn_coeff[0 : ((poly_degree + 1) * m)]
+                    c_opt_y = nn_coeff[
+                        ((poly_degree + 1) * m) : (2 * (poly_degree + 1) * m)
+                    ]
+                    c_opt_z = nn_coeff[
+                        (2 * (poly_degree + 1) * m) : (3 * (poly_degree + 1) * m)
+                    ]
+                    c_opt_yaw = nn_coeff[(3 * (poly_degree + 1) * m) :]
 
             ################## Construct polynomials from c_opt
             self.x_poly = np.zeros((m, 3, (poly_degree + 1)))

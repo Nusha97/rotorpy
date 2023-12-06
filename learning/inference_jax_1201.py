@@ -228,6 +228,7 @@ def compute_cost(sim_result):
 # Function to run simulation and compute cost
 def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_network, regularizer=None, vehicle=None, controller=None):
     traj = MinSnap(points=waypoints, yaw_angles=yaw_angles, v_avg=vavg, use_neural_network=use_neural_network, regularizer=regularizer)
+    nan_encountered = traj.nan_encountered  # Flag indicating if NaN was encountered
 
     sim_instance = Environment(vehicle=vehicle, controller=controller, trajectory=traj, wind_profile=None, sim_rate=100)
 
@@ -244,7 +245,7 @@ def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_netw
     sim_result = sim_instance.run(t_final=traj.t_keyframes[-1], use_mocap=False, terminate=False, plot=False)
     trajectory_cost = compute_cost(sim_result)
 
-    return sim_result, trajectory_cost, waypoint_times
+    return sim_result, trajectory_cost, waypoint_times, nan_encountered
 
 def plot_results(sim_result_init, sim_result_nn, waypoints, filename=None, waypoints_time=None):
         # Compute yaw angles from quaternions
@@ -430,14 +431,15 @@ def main():
         figure_path = "/workspace/data_output/sim_figures"
 
         # run simulation and compute cost for the initial trajectory
-        sim_result_init, trajectory_cost_init, waypoints_time = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller)
-        print(f"Trajectory {i} initial cost: {trajectory_cost_init}")
-
+        sim_result_init, trajectory_cost_init, waypoints_time, _ = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller)
         # run simulation and compute cost for the modified trajectory
-        sim_result_nn, trajectory_cost_nn,_ = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=True, regularizer=vf, vehicle=vehicle, controller=controller)
-        print(f"Trajectory {i} neural network modified cost: {trajectory_cost_nn}")
+        sim_result_nn, trajectory_cost_nn,_,nan_encountered = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=True, regularizer=vf, vehicle=vehicle, controller=controller)
+        print("nan_encountered in inference", nan_encountered)
+        if nan_encountered == False:
+            print(f"Trajectory {i} initial cost: {trajectory_cost_init}")
+            print(f"Trajectory {i} neural network modified cost: {trajectory_cost_nn}")
 
-        plot_results(sim_result_init, sim_result_nn, waypoints, filename=figure_path + f"/trajectory_{i}.png", waypoints_time=waypoints_time)
+            plot_results(sim_result_init, sim_result_nn, waypoints, filename=figure_path + f"/trajectory_{i}.png", waypoints_time=waypoints_time)
 
 
 

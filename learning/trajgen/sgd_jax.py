@@ -75,15 +75,10 @@ def modify_reference(
     # _, grads = grad_fn(init_ref, aug_test_state[i, :][:, None])
     # new_ref = init_ref - 0.001 * onp.ravel(grads)
     sol = pg.run(coeff0, hyperparams_proj=(A_coeff_full, b_coeff_full))
-    if np.isnan(sol.state.error):
-        return None, None  # Return None if NaN encountered
-    else:
-        coeff = sol.params
-        pred = sol.state.error
 
-        print("Norm difference", np.linalg.norm(coeff0.ravel() - coeff))
-
-        return coeff, pred
+    nan_encountered = np.isnan(sol.state.error)
+    print("nan_encountered", nan_encountered)
+    return sol.params, sol.state.error, nan_encountered
 
 
 
