@@ -247,7 +247,7 @@ def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_netw
 
     return sim_result, trajectory_cost, waypoint_times, nan_encountered
 
-def plot_results(sim_result_init, sim_result_nn, waypoints, filename=None, waypoints_time=None):
+def plot_results(sim_result_init, sim_result_nn, waypoints, initial_cost, predicted_cost, filename=None, waypoints_time=None):
         # Compute yaw angles from quaternions
     def compute_yaw_from_quaternion(quaternions):
         R_matrices = R.from_quat(quaternions).as_matrix()
@@ -281,6 +281,9 @@ def plot_results(sim_result_init, sim_result_nn, waypoints, filename=None, waypo
     ax_traj.set_ylabel("Y")
     ax_traj.set_zlabel("Z")
     ax_traj.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref', 'Waypoints'])
+    # Display initial and predicted costs
+    cost_text = f"Initial Cost: {initial_cost:.2f}\nPredicted Cost: {predicted_cost:.2f}"
+    ax_traj.text2D(0.05, 0.95, cost_text, transform=ax_traj.transAxes)
 
     # Subplots for X, Y, Z, Yaw
     gs = fig.add_gridspec(4, 2)
@@ -415,6 +418,8 @@ def main():
     predicted_cost_diffs = []
     true_cost_diffs = []
 
+    cost_differences = []
+
     # Loop for 100 trajectories
     for i in range(100):
         # Sample waypoints
@@ -438,10 +443,17 @@ def main():
         if nan_encountered == False:
             print(f"Trajectory {i} initial cost: {trajectory_cost_init}")
             print(f"Trajectory {i} neural network modified cost: {trajectory_cost_nn}")
+            cost_diff = trajectory_cost_nn - trajectory_cost_init
+            cost_differences.append(cost_diff)
+            plot_results(sim_result_init, sim_result_nn, waypoints, trajectory_cost_init, trajectory_cost_nn, filename=figure_path + f"/trajectory_{i}.png", waypoints_time=waypoints_time)
 
-            plot_results(sim_result_init, sim_result_nn, waypoints, filename=figure_path + f"/trajectory_{i}.png", waypoints_time=waypoints_time)
-
-
+    # After loop - create boxplot
+    plt.figure()
+    plt.boxplot(cost_differences)
+    plt.title('Predicted Cost - Initial Cost for Non-NaN Trajectories')
+    plt.ylabel('Cost Difference')
+    plt.savefig(figure_path + "/cost_difference_boxplot.png")
+    plt.close()
 
 
 
