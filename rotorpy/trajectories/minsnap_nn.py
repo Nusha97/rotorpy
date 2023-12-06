@@ -33,6 +33,8 @@ def cvxopt_solve_qp(P, q, G=None, h=None, A=None, b=None):
         args.extend([cvxopt.matrix(G), cvxopt.matrix(h)])
     if A is not None:
         args.extend([cvxopt.matrix(A), cvxopt.matrix(b)])
+    # show progress false
+    cvxopt.solvers.options["show_progress"] = False
     sol = cvxopt.solvers.qp(*args)
     if "optimal" not in sol["status"]:
         return None

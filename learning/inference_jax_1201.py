@@ -26,7 +26,7 @@ import ruamel.yaml as yaml
 from flax.training import train_state
 import optax
 import jax
-from mlp import MLP, MLP_torch
+from mlp_jax import MLP
 from model_learning import restore_checkpoint
 from jaxopt import ProjectedGradient
 from jaxopt.projection import projection_affine_set
@@ -240,40 +240,106 @@ def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_netw
           'rotor_speeds': np.array([1788.53, 1788.53, 1788.53, 1788.53])}
     sim_instance.vehicle.initial_state = x0
 
+    waypoint_times = traj.t_keyframes
     sim_result = sim_instance.run(t_final=traj.t_keyframes[-1], use_mocap=False, terminate=False, plot=False)
     trajectory_cost = compute_cost(sim_result)
 
-    return sim_result, trajectory_cost
+    return sim_result, trajectory_cost, waypoint_times
 
-def plot_results(sim_result, filename=None):
-    # Plotting the results of sim_result['state']['x'] and sim_result['flat']['x'] shows the actual trajectory and the reference trajectory
-    fig = plt.figure()
-    axes = fig.add_subplot(111, projection="3d")
-    axes.plot3D(
-        sim_result["state"]["x"][:, 0],
-        sim_result["state"]["x"][:, 1],
-        sim_result["state"]["x"][:, 2],
-        "b",
-    )
-    axes.plot3D(
-        sim_result["flat"]["x"][:, 0],
-        sim_result["flat"]["x"][:, 1],
-        sim_result["flat"]["x"][:, 2],
-        "r",
-    )
-    # put legend
-    axes.legend(["actual_traj", "ref_traj"])
-    axes.set_xlim(-6, 6)
-    axes.set_zlim(-6, 6)
-    axes.set_ylim(-6, 6)
-    axes.set_xlabel("x")
-    axes.set_ylabel("y")
-    axes.set_zlabel("z")
-    title = "ref_traj vs actual_traj"
-    axes.set_title(title)
+def plot_results(sim_result_init, sim_result_nn, waypoints, filename=None, waypoints_time=None):
+        # Compute yaw angles from quaternions
+    def compute_yaw_from_quaternion(quaternions):
+        R_matrices = R.from_quat(quaternions).as_matrix()
+        b3 = R_matrices[:, :, 2]
+        H = np.zeros((len(quaternions), 3, 3))
+        for i in range(len(quaternions)):
+            H[i, :, :] = np.array([
+                [1 - (b3[i, 0] ** 2) / (1 + b3[i, 2]), -(b3[i, 0] * b3[i, 1]) / (1 + b3[i, 2]), b3[i, 0]],
+                [-(b3[i, 0] * b3[i, 1]) / (1 + b3[i, 2]), 1 - (b3[i, 1] ** 2) / (1 + b3[i, 2]), b3[i, 1]],
+                [-b3[i, 0], -b3[i, 1], b3[i, 2]],
+            ])
+        Hyaw = np.transpose(H, axes=(0, 2, 1)) @ R_matrices
+        actual_yaw = np.arctan2(Hyaw[:, 1, 0], Hyaw[:, 0, 0])
+        return actual_yaw
+
+    actual_yaw_init = compute_yaw_from_quaternion(sim_result_init['state']['q'])
+    actual_yaw_nn = compute_yaw_from_quaternion(sim_result_nn['state']['q'])
+
+    # Create the figure
+    fig = plt.figure(figsize=(18, 8))
+
+    # 3D Trajectory plot with waypoints
+    ax_traj = fig.add_subplot(121, projection="3d")
+    ax_traj.plot3D(sim_result_init["state"]["x"][:, 0], sim_result_init["state"]["x"][:, 1], sim_result_init["state"]["x"][:, 2], 'b')
+    ax_traj.plot3D(sim_result_init["flat"]["x"][:, 0], sim_result_init["flat"]["x"][:, 1], sim_result_init["flat"]["x"][:, 2], 'r')
+    ax_traj.plot3D(sim_result_nn["state"]["x"][:, 0], sim_result_nn["state"]["x"][:, 1], sim_result_nn["state"]["x"][:, 2], 'g')
+    ax_traj.plot3D(sim_result_nn["flat"]["x"][:, 0], sim_result_nn["flat"]["x"][:, 1], sim_result_nn["flat"]["x"][:, 2], 'm')
+    ax_traj.scatter(waypoints[:, 0], waypoints[:, 1], waypoints[:, 2], c='k', marker='o')
+    ax_traj.set_title("3D Trajectories with Waypoints")
+    ax_traj.set_xlabel("X")
+    ax_traj.set_ylabel("Y")
+    ax_traj.set_zlabel("Z")
+    ax_traj.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref', 'Waypoints'])
+
+    # Subplots for X, Y, Z, Yaw
+    gs = fig.add_gridspec(4, 2)
+    ax_x = fig.add_subplot(gs[0, 1])
+    ax_y = fig.add_subplot(gs[1, 1])
+    ax_z = fig.add_subplot(gs[2, 1])
+    ax_yaw = fig.add_subplot(gs[3, 1])
+
+    # Subplot for X
+    ax_x.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 0], 'b')
+    ax_x.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 0], 'r')
+    ax_x.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 0], 'g')
+    ax_x.plot(sim_result_nn['time'], sim_result_nn['flat']['x'][:, 0], 'm')
+    ax_x.set_title('X Position Over Time')
+    ax_x.set_xlabel('Time')
+    ax_x.set_ylabel('X Position')
+    ax_x.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'])
+
+    # Subplot for Y
+    ax_y.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 1], 'b')
+    ax_y.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 1], 'r')
+    ax_y.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 1], 'g')
+    ax_y.plot(sim_result_nn['time'], sim_result_nn['flat']['x'][:, 1], 'm')
+    ax_y.set_title('Y Position Over Time')
+    ax_y.set_xlabel('Time')
+    ax_y.set_ylabel('Y Position')
+    ax_y.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'])
+
+    # Subplot for Z
+    ax_z.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 2], 'b')
+    ax_z.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 2], 'r')
+    ax_z.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 2], 'g')
+    ax_z.plot(sim_result_nn['time'], sim_result_nn['flat']['x'][:, 2], 'm')
+    ax_z.set_title('Z Position Over Time')
+    ax_z.set_xlabel('Time')
+    ax_z.set_ylabel('Z Position')
+    ax_z.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'])
+
+    # Adding keyframes to the subplots
+    for ax, dim in zip([ax_x, ax_y, ax_z], [0, 1, 2]):
+        ax.scatter(waypoints_time, waypoints[:, dim], c='k', marker='o', label='Waypoints')
+
+    # Subplot for Yaw
+    ax_yaw.plot(sim_result_init['time'], actual_yaw_init, 'b')
+    ax_yaw.plot(sim_result_init['time'], sim_result_init['flat']['yaw'], 'r')
+    ax_yaw.plot(sim_result_nn['time'], actual_yaw_nn, 'g')
+    ax_yaw.plot(sim_result_nn['time'], sim_result_nn['flat']['yaw'], 'm')
+    ax_yaw.set_title('Yaw Angle Over Time')
+    ax_yaw.set_xlabel('Time')
+    ax_yaw.set_ylabel('Yaw Angle')
+    ax_yaw.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'])
+
+    ax_yaw.scatter(waypoints_time, np.zeros(len(waypoints)), c='k', marker='o', label='Waypoints')
+
+    plt.tight_layout()
     if filename is not None:
         plt.savefig(filename)
-    # plt.show()
+
+    # close the figure
+    plt.close(fig)
 
 def main():
     # Define the lists to keep track of times for the simulations
@@ -282,7 +348,7 @@ def main():
     times_poly = []
 
     # Initialize neural network
-    rho = 1
+    rho = 0.1
     input_size = 96  # number of coeff
     # num_data = 72
 
@@ -315,15 +381,16 @@ def main():
     model_save = yaml_data["save_path"] + str(rho)
     print("model_save", model_save)
     
+    trained_model_state = restore_checkpoint(model_state, model_save, 7)
+
     # print("Current model structure:", model)
     # print("Model parameters:", params)
 
-    # # Verify the path to the checkpoint
+    # Verify the path to the checkpoint
     # print("Checkpoint path:", model_save)
-    
-    trained_model_state = restore_checkpoint(model_state, model_save)
 
-    vf = model.bind(trained_model_state.params)
+    # vf = model.bind(trained_model_state.params)
+    vf = trained_model_state
 
     # Define the quadrotor parameters
     world_size = 10
@@ -344,6 +411,9 @@ def main():
     vehicle = Multirotor(quad_params)
     controller = SE3Control(quad_params)
 
+    predicted_cost_diffs = []
+    true_cost_diffs = []
+
     # Loop for 100 trajectories
     for i in range(100):
         # Sample waypoints
@@ -352,72 +422,25 @@ def main():
                                         start_waypoint=start_waypoint, end_waypoint=end_waypoint)
         
         # Sample yaw angles
-        yaw_angles = sample_yaw(seed=427, waypoints=waypoints, yaw_min=yaw_min, yaw_max=yaw_max)
+        yaw_angles = sample_yaw(seed=i, waypoints=waypoints, yaw_min=yaw_min, yaw_max=yaw_max)
+
+        yaw_angles_zero = np.zeros(len(waypoints))
 
         # /workspace/rotorpy/rotorpy/sim_figures/
-        figure_path = "/workspace/rotorpy/rotorpy/sim_figures/"
-
-        # visualize the waypoints
-        fig = plt.figure()
-        axes = fig.add_subplot(111, projection="3d")
-        axes.plot3D(
-            waypoints[:, 0],
-            waypoints[:, 1],
-            waypoints[:, 2],
-            "*",
-        )
-        axes.set_xlim(-6, 6)
-        axes.set_zlim(0, 1)
-        axes.set_ylim(-6, 6)
-        plt.savefig(figure_path + "waypoints.png")
+        figure_path = "/workspace/data_output/sim_figures"
 
         # run simulation and compute cost for the initial trajectory
-        sim_result_init, trajectory_cost_init = run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller)
+        sim_result_init, trajectory_cost_init, waypoints_time = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller)
         print(f"Trajectory {i} initial cost: {trajectory_cost_init}")
-            
-        # generate min_snap trajectory and run simulation
-        plot_results(sim_result_init, filename=f"{figure_path}init_traj_{i}.png")
 
         # run simulation and compute cost for the modified trajectory
-        sim_result_nn, trajectory_cost_nn = run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_network=True, regularizer=vf, vehicle=vehicle, controller=controller)
+        sim_result_nn, trajectory_cost_nn,_ = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=True, regularizer=vf, vehicle=vehicle, controller=controller)
         print(f"Trajectory {i} neural network modified cost: {trajectory_cost_nn}")
 
-        plot_results(sim_result_nn, filename=f"{figure_path}nn_modified_traj_{i}.png")
+        plot_results(sim_result_init, sim_result_nn, waypoints, filename=figure_path + f"/trajectory_{i}.png", waypoints_time=waypoints_time)
 
 
-    """
-    # plot the ref yaw angle over time to see if it's actually varying from the network
-    fig = plt.figure()
-    axes = fig.add_subplot(111)
-    axes.plot(times_init_min_snap, ref_traj_init_min_snap[:, 3], "b")
-    axes.plot(times_modified, ref_traj_modified[:, 3], "r")
-    # print("ref_traj_init_min_snap", ref_traj_init_min_snap[:, 3])
-    # axis limits to be between 0 and 2pi
-    # axes.set_ylim(0, 2 * np.pi)
-    # put legend
-    axes.legend(["ref_traj_init_min_snap", "ref_traj_modified"])
-    axes.set_xlabel("time")
-    axes.set_ylabel("yaw")
-    axes.set_title("ref yaw")
-    plt.savefig("/workspace/rotorpy/rotorpy/sim_figures/init_yawref.png")
-    # plt.show()
 
-    # plot the yaw_ref angle over time to see if it's actually varying from the network
-    fig = plt.figure()
-    axes = fig.add_subplot(111)
-    axes.plot(times_init_min_snap, yaw_ref_init_min_snap, "b")
-    axes.plot(times_modified, yaw_ref_modified, "r")
-    # print("yaw_ref_init_min_snap", yaw_ref_init_min_snap)
-    # axis limits to be between 0 and 2pi
-    # axes.set_ylim(0, 2 * np.pi)
-    # put legend
-    axes.legend(["yaw_ref_init_min_snap", "yaw_ref_modified"])
-    axes.set_xlabel("time")
-    axes.set_ylabel("yaw")
-    axes.set_title("yaw_ref")
-    plt.savefig("/workspace/rotorpy/rotorpy/sim_figures/nn_yawref.png")
-    # plt.show()
-    """
 
 
 if __name__ == "__main__":

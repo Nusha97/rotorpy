@@ -361,6 +361,9 @@ def main():
     # save checkpoint
     save_checkpoint(trained_model_state, model_save, 7)
 
+    # restore checkpoint
+    # trained_model_state = restore_checkpoint(trained_model_state, model_save, 7)
+
     num_batches = len(train_data_loader)
     print('Number of batches:', num_batches)
     print('Expected number of batches:', np.ceil(100000 / batch_size))  # Assuming batch_size is the size of each batch

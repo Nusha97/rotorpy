@@ -212,14 +212,38 @@ def eval_model(state, data_loader, batch_size):
     print(f"Loss of the model: {loss:4.2f}")
 
 
-def restore_checkpoint(state, workdir):
+def restore_checkpoint(state, workdir, step=0):
     """
     Restore the weights of the model
     :param state: initialized model object
     :param workdir: file path
     :return: state of the network
     """
-    return checkpoints.restore_checkpoint(workdir, state)
+    return checkpoints.restore_checkpoint(workdir, target=state, step=step)
+
+# def restore_checkpoint(state, workdir):
+#     """
+#     Restore the weights of the model
+#     :param state: initialized model object
+#     :param workdir: file path
+#     :return: state of the network
+#     """
+    # return checkpoints.restore_checkpoint(workdir, target=None)
+    # restored_state = checkpoints.restore_checkpoint(workdir, target=None)
+
+    # # Optional: Print the restored state for debugging
+    # print("Restored model state:", restored_state)
+
+    # return restored_state
+# def restore_checkpoint(workdir, step):
+#     """
+#     Restore the weights of the model from a specific checkpoint step
+#     :param state: initialized model object
+#     :param workdir: directory containing checkpoints
+#     :param step: the specific step number of the checkpoint to restore
+#     :return: state of the network
+#     """
+#     return checkpoints.restore_checkpoint(workdir, target=None, step=step)
 
 
 def save_checkpoint(state, workdir, step=0):
@@ -230,8 +254,8 @@ def save_checkpoint(state, workdir, step=0):
     :param step: checkpoint index
     :return: None
     """
-    # checkpoints.save_checkpoint(workdir, state, step)
-    checkpoints.save_checkpoint(workdir, state, step, overwrite=True, keep=2)
+    # checkpoints.save_checkpoint(workdir, state, step, overwrite=True, keep=2)
+    checkpoints.save_checkpoint(workdir, target=state, step=step)
 
 
 
