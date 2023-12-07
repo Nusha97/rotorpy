@@ -252,8 +252,8 @@ def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_netw
 
     return sim_result, trajectory_cost, waypoint_times, nan_encountered
 
-def plot_results(sim_result_init, sim_result_nn, waypoints, initial_cost, predicted_cost, filename=None, waypoints_time=None):
-        # Compute yaw angles from quaternions
+def plot_results_for_drag_compensation(sim_result_init, waypoints, initial_cost, filename=None, waypoints_time=None):
+    # Compute yaw angles from quaternions
     def compute_yaw_from_quaternion(quaternions):
         R_matrices = R.from_quat(quaternions).as_matrix()
         b3 = R_matrices[:, :, 2]
@@ -269,7 +269,6 @@ def plot_results(sim_result_init, sim_result_nn, waypoints, initial_cost, predic
         return actual_yaw
 
     actual_yaw_init = compute_yaw_from_quaternion(sim_result_init['state']['q'])
-    actual_yaw_nn = compute_yaw_from_quaternion(sim_result_nn['state']['q'])
 
     # Create the figure
     fig = plt.figure(figsize=(18, 8))
@@ -278,18 +277,16 @@ def plot_results(sim_result_init, sim_result_nn, waypoints, initial_cost, predic
     ax_traj = fig.add_subplot(121, projection="3d")
     ax_traj.plot3D(sim_result_init["state"]["x"][:, 0], sim_result_init["state"]["x"][:, 1], sim_result_init["state"]["x"][:, 2], 'b--')
     ax_traj.plot3D(sim_result_init["flat"]["x"][:, 0], sim_result_init["flat"]["x"][:, 1], sim_result_init["flat"]["x"][:, 2], 'r-.')
-    ax_traj.plot3D(sim_result_nn["state"]["x"][:, 0], sim_result_nn["state"]["x"][:, 1], sim_result_nn["state"]["x"][:, 2], 'g:')
-    ax_traj.plot3D(sim_result_nn["flat"]["x"][:, 0], sim_result_nn["flat"]["x"][:, 1], sim_result_nn["flat"]["x"][:, 2], 'm')
     ax_traj.scatter(waypoints[:, 0], waypoints[:, 1], waypoints[:, 2], c='k', marker='o')
-    ax_traj.set_title("3D Trajectories with Waypoints", fontsize=18)
+    ax_traj.set_title("3D Trajectory with Drag Compensation", fontsize=18)
     ax_traj.set_xlabel("X", fontsize=16)
     ax_traj.set_ylabel("Y", fontsize=16)
     ax_traj.set_zlabel("Z", fontsize=16)
-    ax_traj.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref', 'Waypoints'], fontsize=14)
-    cost_text = f"Initial Cost: {initial_cost:.2f}\nSimulated Cost: {predicted_cost:.2f}"
-    ax_traj.text2D(0.04, 0.02, cost_text, transform=ax_traj.transAxes, fontsize=18)
-# cost_text = f"Initial Cost: {initial_cost:.2f}\nSimulated Cost: {predicted_cost:.2f}"
-    # ax_traj.text2D(0.05, 0.95, cost_text, transform=ax_traj.transAxes, fontsize=16)
+    ax_traj.legend(['Actual', 'Reference', 'Waypoints'], fontsize=14)
+
+    # Display initial cost
+    cost_text = f"Initial Cost with Drag Compensation: {initial_cost:.2f}"
+    ax_traj.text2D(0.03, 0.01, cost_text, transform=ax_traj.transAxes, fontsize=16)
 
     # Subplots for X, Y, Z, Yaw
     gs = fig.add_gridspec(4, 2)
@@ -301,32 +298,23 @@ def plot_results(sim_result_init, sim_result_nn, waypoints, initial_cost, predic
     # Subplot for X
     ax_x.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 0], 'b--')
     ax_x.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 0], 'r-.')
-    ax_x.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 0], 'g:')
-    ax_x.plot(sim_result_nn['time'], sim_result_nn['flat']['x'][:, 0], 'm')
     ax_x.set_title('X Position Over Time', fontsize=18)
     ax_x.set_xlabel('Time', fontsize=16)
     ax_x.set_ylabel('X Position', fontsize=16)
-    # ax_x.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'], fontsize=12)
-
+    
     # Subplot for Y
     ax_y.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 1], 'b--')
     ax_y.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 1], 'r-.')
-    ax_y.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 1], 'g:')
-    ax_y.plot(sim_result_nn['time'], sim_result_nn['flat']['x'][:, 1], 'm')
     ax_y.set_title('Y Position Over Time', fontsize=18)
     ax_y.set_xlabel('Time', fontsize=16)
     ax_y.set_ylabel('Y Position', fontsize=16)
-    # ax_y.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'], fontsize=12)
-
+    
     # Subplot for Z
     ax_z.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 2], 'b--')
     ax_z.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 2], 'r-.')
-    ax_z.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 2], 'g:')
-    ax_z.plot(sim_result_nn['time'], sim_result_nn['flat']['x'][:, 2], 'm')
     ax_z.set_title('Z Position Over Time', fontsize=18)
     ax_z.set_xlabel('Time', fontsize=16)
     ax_z.set_ylabel('Z Position', fontsize=16)
-    # ax_z.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'], fontsize=12)
 
     # Adding keyframes to the subplots
     for ax, dim in zip([ax_x, ax_y, ax_z], [0, 1, 2]):
@@ -335,20 +323,18 @@ def plot_results(sim_result_init, sim_result_nn, waypoints, initial_cost, predic
     # Subplot for Yaw
     ax_yaw.plot(sim_result_init['time'], actual_yaw_init, 'b--')
     ax_yaw.plot(sim_result_init['time'], sim_result_init['flat']['yaw'], 'r-.')
-    ax_yaw.plot(sim_result_nn['time'], actual_yaw_nn, 'g:')
-    ax_yaw.plot(sim_result_nn['time'], sim_result_nn['flat']['yaw'], 'm')
     ax_yaw.set_title('Yaw Angle Over Time', fontsize=18)
     ax_yaw.set_xlabel('Time', fontsize=16)
     ax_yaw.set_ylabel('Yaw Angle', fontsize=16)
-    # ax_yaw.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'], fontsize=12)
     ax_yaw.scatter(waypoints_time, np.zeros(len(waypoints)), c='k', marker='o', label='Waypoints')
 
     plt.tight_layout()
     if filename is not None:
         plt.savefig(filename)
 
-    # close the figure
+    # Close the figure
     plt.close(fig)
+
 
 def main():
     # Define the lists to keep track of times for the simulations
@@ -419,6 +405,7 @@ def main():
     world = World.empty([-world_size/2, world_size/2, -world_size/2, world_size/2, -world_size/2, world_size/2])
     vehicle = Multirotor(quad_params)
     controller = SE3Control(quad_params)
+    controller_with_drag_compensation = SE3Control(quad_params, drag_compensation=True)
 
     predicted_cost_diffs = []
     true_cost_diffs = []
@@ -442,6 +429,14 @@ def main():
 
         start_time = time.time()
         total_time = 0
+
+        #################### drag compensation ####################
+        # run simulation and compute cost for the initial trajectory with drag compensation
+        sim_result_init_drag_compensation, trajectory_cost_init_drag_compensation, waypoints_time, _ = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller_with_drag_compensation)
+        print(f"Trajectory {i} initial cost with drag compensation: {trajectory_cost_init_drag_compensation}")
+        plot_results_for_drag_compensation(sim_result_init_drag_compensation, waypoints, trajectory_cost_init_drag_compensation, filename=figure_path + f"/trajectory_{i}_drag_compensation.png", waypoints_time=waypoints_time)
+        #################### drag compensation ####################
+        """
         # run simulation and compute cost for the initial trajectory
         sim_result_init, trajectory_cost_init, waypoints_time, _ = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller)
         # run simulation and compute cost for the modified trajectory
@@ -461,10 +456,8 @@ def main():
 
     # Save the cost data to a CSV file
     costs_df = pd.DataFrame(cost_differences, columns=['Initial Cost', 'NN Modified Cost', 'Cost Difference'])
-    # save to figure path
-    costs_df.to_csv(figure_path + "/cost_data.csv", index=False)
-    # costs_df.to_csv("/workspace/data_output/cost_data.csv", index=False)
-
+    costs_df.to_csv("/workspace/data_output/cost_data.csv", index=False)
+    """
     # costs_df = pd.read_csv("/workspace/data_output/cost_data.csv")
     # plt.figure()
     # plt.boxplot(costs_df['Cost Difference'], showfliers=False)  # Set showfliers=False to hide outliers
