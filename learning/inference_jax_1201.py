@@ -44,6 +44,7 @@ from rotorpy.trajectories.minsnap_nn import MinSnap
 from rotorpy.vehicles.crazyflie_params import quad_params
 from rotorpy.environments import Environment
 from rotorpy.world import World
+import pandas as pd
 
 gamma = 1
 
@@ -271,19 +272,20 @@ def plot_results(sim_result_init, sim_result_nn, waypoints, initial_cost, predic
 
     # 3D Trajectory plot with waypoints
     ax_traj = fig.add_subplot(121, projection="3d")
-    ax_traj.plot3D(sim_result_init["state"]["x"][:, 0], sim_result_init["state"]["x"][:, 1], sim_result_init["state"]["x"][:, 2], 'b')
-    ax_traj.plot3D(sim_result_init["flat"]["x"][:, 0], sim_result_init["flat"]["x"][:, 1], sim_result_init["flat"]["x"][:, 2], 'r')
-    ax_traj.plot3D(sim_result_nn["state"]["x"][:, 0], sim_result_nn["state"]["x"][:, 1], sim_result_nn["state"]["x"][:, 2], 'g')
+    ax_traj.plot3D(sim_result_init["state"]["x"][:, 0], sim_result_init["state"]["x"][:, 1], sim_result_init["state"]["x"][:, 2], 'b--')
+    ax_traj.plot3D(sim_result_init["flat"]["x"][:, 0], sim_result_init["flat"]["x"][:, 1], sim_result_init["flat"]["x"][:, 2], 'r-.')
+    ax_traj.plot3D(sim_result_nn["state"]["x"][:, 0], sim_result_nn["state"]["x"][:, 1], sim_result_nn["state"]["x"][:, 2], 'g:')
     ax_traj.plot3D(sim_result_nn["flat"]["x"][:, 0], sim_result_nn["flat"]["x"][:, 1], sim_result_nn["flat"]["x"][:, 2], 'm')
     ax_traj.scatter(waypoints[:, 0], waypoints[:, 1], waypoints[:, 2], c='k', marker='o')
-    ax_traj.set_title("3D Trajectories with Waypoints")
-    ax_traj.set_xlabel("X")
-    ax_traj.set_ylabel("Y")
-    ax_traj.set_zlabel("Z")
-    ax_traj.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref', 'Waypoints'])
-    # Display initial and predicted costs
-    cost_text = f"Initial Cost: {initial_cost:.2f}\nPredicted Cost: {predicted_cost:.2f}"
-    ax_traj.text2D(0.05, 0.95, cost_text, transform=ax_traj.transAxes)
+    ax_traj.set_title("3D Trajectories with Waypoints", fontsize=18)
+    ax_traj.set_xlabel("X", fontsize=16)
+    ax_traj.set_ylabel("Y", fontsize=16)
+    ax_traj.set_zlabel("Z", fontsize=16)
+    ax_traj.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref', 'Waypoints'], fontsize=14)
+    cost_text = f"Initial Cost: {initial_cost:.2f}\nSimulated Cost: {predicted_cost:.2f}"
+    ax_traj.text2D(0.04, 0.02, cost_text, transform=ax_traj.transAxes, fontsize=18)
+# cost_text = f"Initial Cost: {initial_cost:.2f}\nSimulated Cost: {predicted_cost:.2f}"
+    # ax_traj.text2D(0.05, 0.95, cost_text, transform=ax_traj.transAxes, fontsize=16)
 
     # Subplots for X, Y, Z, Yaw
     gs = fig.add_gridspec(4, 2)
@@ -293,49 +295,48 @@ def plot_results(sim_result_init, sim_result_nn, waypoints, initial_cost, predic
     ax_yaw = fig.add_subplot(gs[3, 1])
 
     # Subplot for X
-    ax_x.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 0], 'b')
-    ax_x.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 0], 'r')
-    ax_x.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 0], 'g')
+    ax_x.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 0], 'b--')
+    ax_x.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 0], 'r-.')
+    ax_x.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 0], 'g:')
     ax_x.plot(sim_result_nn['time'], sim_result_nn['flat']['x'][:, 0], 'm')
-    ax_x.set_title('X Position Over Time')
-    ax_x.set_xlabel('Time')
-    ax_x.set_ylabel('X Position')
-    ax_x.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'])
+    ax_x.set_title('X Position Over Time', fontsize=18)
+    ax_x.set_xlabel('Time', fontsize=16)
+    ax_x.set_ylabel('X Position', fontsize=16)
+    # ax_x.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'], fontsize=12)
 
     # Subplot for Y
-    ax_y.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 1], 'b')
-    ax_y.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 1], 'r')
-    ax_y.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 1], 'g')
+    ax_y.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 1], 'b--')
+    ax_y.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 1], 'r-.')
+    ax_y.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 1], 'g:')
     ax_y.plot(sim_result_nn['time'], sim_result_nn['flat']['x'][:, 1], 'm')
-    ax_y.set_title('Y Position Over Time')
-    ax_y.set_xlabel('Time')
-    ax_y.set_ylabel('Y Position')
-    ax_y.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'])
+    ax_y.set_title('Y Position Over Time', fontsize=18)
+    ax_y.set_xlabel('Time', fontsize=16)
+    ax_y.set_ylabel('Y Position', fontsize=16)
+    # ax_y.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'], fontsize=12)
 
     # Subplot for Z
-    ax_z.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 2], 'b')
-    ax_z.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 2], 'r')
-    ax_z.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 2], 'g')
+    ax_z.plot(sim_result_init['time'], sim_result_init['state']['x'][:, 2], 'b--')
+    ax_z.plot(sim_result_init['time'], sim_result_init['flat']['x'][:, 2], 'r-.')
+    ax_z.plot(sim_result_nn['time'], sim_result_nn['state']['x'][:, 2], 'g:')
     ax_z.plot(sim_result_nn['time'], sim_result_nn['flat']['x'][:, 2], 'm')
-    ax_z.set_title('Z Position Over Time')
-    ax_z.set_xlabel('Time')
-    ax_z.set_ylabel('Z Position')
-    ax_z.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'])
+    ax_z.set_title('Z Position Over Time', fontsize=18)
+    ax_z.set_xlabel('Time', fontsize=16)
+    ax_z.set_ylabel('Z Position', fontsize=16)
+    # ax_z.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'], fontsize=12)
 
     # Adding keyframes to the subplots
     for ax, dim in zip([ax_x, ax_y, ax_z], [0, 1, 2]):
         ax.scatter(waypoints_time, waypoints[:, dim], c='k', marker='o', label='Waypoints')
 
     # Subplot for Yaw
-    ax_yaw.plot(sim_result_init['time'], actual_yaw_init, 'b')
-    ax_yaw.plot(sim_result_init['time'], sim_result_init['flat']['yaw'], 'r')
-    ax_yaw.plot(sim_result_nn['time'], actual_yaw_nn, 'g')
+    ax_yaw.plot(sim_result_init['time'], actual_yaw_init, 'b--')
+    ax_yaw.plot(sim_result_init['time'], sim_result_init['flat']['yaw'], 'r-.')
+    ax_yaw.plot(sim_result_nn['time'], actual_yaw_nn, 'g:')
     ax_yaw.plot(sim_result_nn['time'], sim_result_nn['flat']['yaw'], 'm')
-    ax_yaw.set_title('Yaw Angle Over Time')
-    ax_yaw.set_xlabel('Time')
-    ax_yaw.set_ylabel('Yaw Angle')
-    ax_yaw.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'])
-
+    ax_yaw.set_title('Yaw Angle Over Time', fontsize=18)
+    ax_yaw.set_xlabel('Time', fontsize=16)
+    ax_yaw.set_ylabel('Yaw Angle', fontsize=16)
+    # ax_yaw.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref'], fontsize=12)
     ax_yaw.scatter(waypoints_time, np.zeros(len(waypoints)), c='k', marker='o', label='Waypoints')
 
     plt.tight_layout()
@@ -433,8 +434,10 @@ def main():
         yaw_angles_zero = np.zeros(len(waypoints))
 
         # /workspace/rotorpy/rotorpy/sim_figures/
-        figure_path = "/workspace/data_output/sim_figures"
+        figure_path = "/workspace/data_output/sim_figures_40"
 
+        start_time = time.time()
+        total_time = 0
         # run simulation and compute cost for the initial trajectory
         sim_result_init, trajectory_cost_init, waypoints_time, _ = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller)
         # run simulation and compute cost for the modified trajectory
@@ -444,17 +447,25 @@ def main():
             print(f"Trajectory {i} initial cost: {trajectory_cost_init}")
             print(f"Trajectory {i} neural network modified cost: {trajectory_cost_nn}")
             cost_diff = trajectory_cost_nn - trajectory_cost_init
-            cost_differences.append(cost_diff)
+            cost_differences.append((trajectory_cost_init, trajectory_cost_nn, cost_diff))
             plot_results(sim_result_init, sim_result_nn, waypoints, trajectory_cost_init, trajectory_cost_nn, filename=figure_path + f"/trajectory_{i}.png", waypoints_time=waypoints_time)
 
-    # After loop - create boxplot
-    plt.figure()
-    plt.boxplot(cost_differences)
-    plt.title('Predicted Cost - Initial Cost for Non-NaN Trajectories')
-    plt.ylabel('Cost Difference')
-    plt.savefig(figure_path + "/cost_difference_boxplot.png")
-    plt.close()
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        total_time += elapsed_time
+        print(f"Elapsed time for trajectory {i}: {elapsed_time} seconds")
 
+    # Save the cost data to a CSV file
+    costs_df = pd.DataFrame(cost_differences, columns=['Initial Cost', 'NN Modified Cost', 'Cost Difference'])
+    costs_df.to_csv("/workspace/data_output/cost_data.csv", index=False)
+
+    # costs_df = pd.read_csv("/workspace/data_output/cost_data.csv")
+    # plt.figure()
+    # plt.boxplot(costs_df['Cost Difference'], showfliers=False)  # Set showfliers=False to hide outliers
+    # plt.title('Predicted Cost - Initial Cost Boxplot')
+    # plt.ylabel('Cost Difference')
+    # plt.savefig(figure_path + "/cost_difference_boxplot_no_outliers.png")
+    # plt.close()
 
 
 if __name__ == "__main__":

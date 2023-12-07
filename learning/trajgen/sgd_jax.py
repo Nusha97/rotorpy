@@ -63,8 +63,9 @@ def modify_reference(
     pg = ProjectedGradient(
         nn_cost,
         projection=projection_affine_set,
-        maxiter=5, # 1, if nan, return initial
+        maxiter=30, # 1, if nan, return initial
         verbose=True,
+        # implicit_differentiation=True,  # Enable implicit differentiation
     )
     # sol = pg.run(coeff0)
     # pg = ProjectedGradient(nn_cost, projection=projection_affine_set)
