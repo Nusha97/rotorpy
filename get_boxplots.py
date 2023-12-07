@@ -1,8 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
-costs_df = pd.read_csv("/workspace/data_output/cost_data.csv")
-figure_path = "/workspace/data_output/sim_figures_40"
+# costs_df = pd.read_csv("/workspace/data_output/sim_figures_40/cost_data.csv")
+figure_path = "/workspace/data_output/sim_figures_drag_compensation"
+costs_df = pd.read_csv(figure_path + "/cost_data.csv")
 
 # Calculate the Simulation Cost to Initial Cost ratio
 costs_df['Simulation Cost to Initial Cost Ratio'] = costs_df['NN Modified Cost'] / costs_df['Initial Cost']

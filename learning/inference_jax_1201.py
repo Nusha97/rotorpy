@@ -50,7 +50,7 @@ gamma = 1
 
 PI = np.pi
 
-def sample_waypoints(num_waypoints, world, world_buffer=2, check_collision=True, min_distance=1, max_distance=3, max_attempts=1000, start_waypoint=None, end_waypoint=None):
+def sample_waypoints(num_waypoints, world, world_buffer=2, check_collision=True, min_distance=1, max_distance=3, max_attempts=1000, start_waypoint=None, end_waypoint=None, rng=None, seed=None):
     """
     Samples random waypoints (x,y,z) in the world. Ensures waypoints do not collide with objects, although there is no guarantee that 
     the path you generate with these waypoints will be collision free. 
@@ -103,7 +103,7 @@ def sample_waypoints(num_waypoints, world, world_buffer=2, check_collision=True,
             collision = True
         return collision
     
-    def single_sample(world, current_waypoints, world_buffer, occupancy_map, min_distance, max_distance, max_attempts=1000, rng=None):
+    def single_sample(world, current_waypoints, world_buffer, occupancy_map, min_distance, max_distance, max_attempts=1000, rng=None, seed=None):
         """
         Samples a single waypoint. 
         Inputs:
@@ -115,9 +115,13 @@ def sample_waypoints(num_waypoints, world, world_buffer=2, check_collision=True,
             max_distance: Maximum distance between consecutive waypoints.
             max_attempts: Maximum number of attempts to sample a waypoint.
             rng: Random number generator. If None, uses numpy's random number generator.
+            seed: Seed for the random number generator.
         Outputs:
             waypoint: A single (x,y,z) waypoint. 
         """
+
+        if seed is not None:
+            np.random.seed(seed)
 
         num_attempts = 0
 
@@ -426,7 +430,7 @@ def main():
         # Sample waypoints
         waypoints = sample_waypoints(num_waypoints=num_waypoints, world=world, world_buffer=world_buffer, 
                                         min_distance=min_distance, max_distance=max_distance, 
-                                        start_waypoint=start_waypoint, end_waypoint=end_waypoint)
+                                        start_waypoint=start_waypoint, end_waypoint=end_waypoint, rng=None, seed=i)
         
         # Sample yaw angles
         yaw_angles = sample_yaw(seed=i, waypoints=waypoints, yaw_min=yaw_min, yaw_max=yaw_max)
@@ -434,7 +438,7 @@ def main():
         yaw_angles_zero = np.zeros(len(waypoints))
 
         # /workspace/rotorpy/rotorpy/sim_figures/
-        figure_path = "/workspace/data_output/sim_figures_40"
+        figure_path = "/workspace/data_output/sim_figures_drag_compensation"
 
         start_time = time.time()
         total_time = 0
