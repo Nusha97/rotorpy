@@ -17,7 +17,7 @@ import torch.utils.data as data
 from flax.training import train_state
 import optax
 import jax
-from mlp_jax import MLP
+from ficnn_jax import FICNN
 # import pandas as pd
 import torch
 
@@ -198,7 +198,7 @@ def angle_wrap(theta):
 
 def main():
     horizon = 502
-    rho = 1000
+    rho = 1
 
     rhos = [0, 1, 5, 10, 20, 50, 100]
     gamma = 1
@@ -292,7 +292,7 @@ def main():
     print(aug_state.shape)
     """
     # Path to your CSV file
-    csv_file_path = "/workspace/data_output/data_diff_rho.csv"
+    csv_file_path = "/workspace/data_output/data_old.csv"
     # cost_coeff_data = np.loadtxt(
     #     "/workspace/data_output/data.csv",
     #     delimiter=",",
@@ -329,22 +329,28 @@ def main():
     p = number_of_coefficients  # Set this to the number of coefficients in your dataset
     print("Number of coefficients:", number_of_coefficients)
 
-    model = MLP(num_hidden=num_hidden, num_outputs=1)
-    # Printing the model shows its attributes
-    print(model)
-
     rng = jax.random.PRNGKey(427)
     rng, inp_rng, init_rng = jax.random.split(rng, 3)
     inp = jax.random.normal(inp_rng, (batch_size, p))  # Batch size 64, input size p
+    model = FICNN(num_hidden_c=num_hidden, num_outputs=1, input_features_c=p, seed=rng)
+    # Printing the model shows its attributes
+    print(model)
+
     # Initialize the model
     params = model.init(init_rng, inp)
 
-    optimizer = optax.sgd(learning_rate=learning_rate, momentum=0.9)
+    # optimizer = optax.sgd(learning_rate=learning_rate, momentum=0.9)
     # optimizer = optax.adam(learning_rate=learning_rate, b1=0.9, b2=0.999, eps=1e-08)
+    learning_rate = learning_rate
+    total_steps = num_epochs*(1000//batch_size) + num_epochs ## Total Batches
+    exponential_decay_scheduler = optax.exponential_decay(init_value=0.0001, transition_steps=total_steps,
+                                                      decay_rate=0.98, transition_begin=int(total_steps*0.25),
+                                                      staircase=False)
+    optimizer = optax.adam(learning_rate=exponential_decay_scheduler)
 
-    model_state = train_state.TrainState.create(
-        apply_fn=model.apply, params=params, tx=optimizer
-    )
+    model_state = train_state.TrainState.create(apply_fn=model.apply,
+                                                params=params,
+                                                tx=optimizer)
 
     train_data_loader = data.DataLoader(
         train_data, batch_size=batch_size, shuffle=True, collate_fn=numpy_collate

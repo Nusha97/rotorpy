@@ -3,3 +3,4 @@ batch_size: 256
 learning_rate: 0.001
 num_epochs: 1000
 save_path: "/workspace/data_output/rho-"
+# save_path: "/workspace/data_output/rho-mean-"

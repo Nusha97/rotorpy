@@ -371,6 +371,28 @@ class MinSnap(object):
             # call modify_reference directly after computing the min snap coeffs and use the returned coeffs in the rest of the class
             self.nan_encountered = False
 
+            min_snap_coeffs = np.concatenate([c_opt_x, c_opt_y, c_opt_z, c_opt_yaw])
+            # get H by concatenating H_pos and H_yaw
+            H = block_diag(
+                *[
+                    0.5 * (P_pos.T + P_pos),
+                    0.5 * (P_pos.T + P_pos),
+                    0.5 * (P_pos.T + P_pos),
+                    0.5 * (P_yaw.T + P_yaw),
+                ]
+            )  # cost fuction is the same for x, y, z
+
+            # get A by concatenating Ax, Ay, Az, Ayaw
+            A = block_diag(*[Ax, Ay, Az, Ayaw])
+
+            # get b by concatenating bx, by, bz, byaw
+            b = np.concatenate((bx, by, bz, byaw))
+
+            self.H = H
+            self.A = A
+            self.b = b
+            self.min_snap_coeffs = min_snap_coeffs
+
             if use_neural_network:
                 min_snap_coeffs = np.concatenate([c_opt_x, c_opt_y, c_opt_z, c_opt_yaw])
 
@@ -389,6 +411,9 @@ class MinSnap(object):
 
                 # get b by concatenating bx, by, bz, byaw
                 b = np.concatenate((bx, by, bz, byaw))
+
+                
+
                 
                 ### minsnap ######## jax  ####
                 nn_coeff, pred, nan_encountered = sgd_jax.modify_reference(
@@ -413,6 +438,12 @@ class MinSnap(object):
                         (2 * (poly_degree + 1) * m) : (3 * (poly_degree + 1) * m)
                     ]
                     c_opt_yaw = nn_coeff[(3 * (poly_degree + 1) * m) :]
+
+            self.c_opt_x = c_opt_x
+            self.c_opt_y = c_opt_y
+            self.c_opt_z = c_opt_z
+            self.c_opt_xyz = np.concatenate([c_opt_x, c_opt_y, c_opt_z])
+            self.c_opt_yaw = c_opt_yaw
 
             ################## Construct polynomials from c_opt
             self.x_poly = np.zeros((m, 3, (poly_degree + 1)))

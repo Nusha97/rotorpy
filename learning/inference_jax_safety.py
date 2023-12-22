@@ -5,6 +5,7 @@ Generate training data
 simple replanning with lissajous trajectory with fixed waypoints
 """
 
+import csv
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
@@ -24,7 +25,6 @@ import sys
 
 import ruamel.yaml as yaml
 from flax.training import train_state
-import flax
 import optax
 import jax
 from mlp_jax import MLP
@@ -47,11 +47,42 @@ from rotorpy.environments import Environment
 from rotorpy.world import World
 import pandas as pd
 
-from scipy.spatial.transform import Rotation as R
+# from trajgen.nonlinear import _coeff_constr_A, _coeff_constr_b
+# from trajgen.trajutils import _cost_matrix
+import jax.scipy.linalg as spl
+from rotorpy.trajectories.minsnap_nn import H_fun, get_1d_constraints, cvxopt_solve_qp
+from flax.linen import jvp
+from trajgen.sgd_jax import modify_reference
+import liboptpy.constr_solvers as cs
+import liboptpy.step_size as ss
+import flax
 
 gamma = 1
 
 PI = np.pi
+
+def check_trajectory_constraints(sim_result, num_samples=100):
+    """
+    Check if the trajectory satisfies specific constraints (e.g., z > 0, -2 < x, y < 2)
+    Inputs:
+        sim_result: Simulation result containing state information.
+        num_samples: Number of points along the trajectory to check.
+    Returns:
+        valid_trajectory: True if trajectory satisfies the constraints, False otherwise.
+    """
+    time_steps = np.linspace(0, sim_result['time'][-1], num_samples)
+
+    for t in time_steps:
+        # Find the closest time index in sim_result to the current time step
+        closest_idx = np.argmin(np.abs(sim_result['time'] - t))
+        x, y, z = sim_result['state']['x'][closest_idx]
+
+        # Check constraints
+        if not (z > 0 and -2 < x < 2 and -2 < y < 2):
+            return False
+
+    return True
+
 
 def sample_waypoints(num_waypoints, world, world_buffer=2, check_collision=True, min_distance=1, max_distance=3, max_attempts=1000, start_waypoint=None, end_waypoint=None, rng=None, seed=None):
     """
@@ -144,10 +175,15 @@ def sample_waypoints(num_waypoints, world, world_buffer=2, check_collision=True,
         waypoint = np.random.uniform(low=lower_limits, 
                                      high=upper_limits, 
                                      size=(3,))
+        # or waypoint[2] <= 0 or abs(waypoint[0]) >= 2 or abs(waypoint[1]) >= 2
         while check_obstacles(waypoint, occupancy_map) or (check_distance(waypoint, current_waypoints, min_distance, max_distance) if occupancy_map is not None else False):
             waypoint = np.random.uniform(low=lower_limits, 
                                          high=upper_limits, 
                                          size=(3,))
+            # make waypoint shift above by 0.3
+            waypoint[2] += 0.3
+
+
             num_attempts += 1
             if num_attempts > max_attempts:
                 raise Exception("Could not sample a waypoint after {} attempts. Issue with obstacles: {}, Issue with min/max distance: {}".format(max_attempts, check_obstacles(waypoint, occupancy_map), check_distance(waypoint, current_waypoints, min_distance, max_distance)))
@@ -191,62 +227,7 @@ def sample_yaw(seed, waypoints, yaw_min=-np.pi, yaw_max=np.pi):
     
     return yaw_angles
 
-def compute_yaw_from_quaternion(quaternions):
-        R_matrices = R.from_quat(quaternions).as_matrix()
-        b3 = R_matrices[:, :, 2]
-        H = np.zeros((len(quaternions), 3, 3))
-        for i in range(len(quaternions)):
-            H[i, :, :] = np.array([
-                [1 - (b3[i, 0] ** 2) / (1 + b3[i, 2]), -(b3[i, 0] * b3[i, 1]) / (1 + b3[i, 2]), b3[i, 0]],
-                [-(b3[i, 0] * b3[i, 1]) / (1 + b3[i, 2]), 1 - (b3[i, 1] ** 2) / (1 + b3[i, 2]), b3[i, 1]],
-                [-b3[i, 0], -b3[i, 1], b3[i, 2]],
-            ])
-        Hyaw = np.transpose(H, axes=(0, 2, 1)) @ R_matrices
-        actual_yaw = np.arctan2(Hyaw[:, 1, 0], Hyaw[:, 0, 0])
-        return actual_yaw
-
-
-def compute_cost(sim_result, robust_c=1.0):
-    """
-    Computes the cost from the output of a simulator instance.
-    Inputs:
-        sim_result: The output of a simulator instance.
-    Outputs:
-        cost: The cost of the trajectory.
-    """
-
-    # Some useful values from the trajectory. 
-    actual_pos = sim_result['state']['x']                                    # Position
-    actual_vel = sim_result['state']['v']                                    # Velocity
-    actual_q = sim_result['state']['q']                                      # Attitude
-    actual_yaw = compute_yaw_from_quaternion(actual_q)                       # Yaw angle
-
-    des_pos = sim_result['flat']['x']                                 # Desired position
-    des_vel = sim_result['flat']['x_dot']                             # Desired velocity
-    q_des = sim_result['control']['cmd_q']                          # Desired attitude
-    desired_yaw = compute_yaw_from_quaternion(q_des)
-
-    cmd_thrust = sim_result['control']['cmd_thrust']                # Desired thrust 
-    cmd_moment = sim_result['control']['cmd_moment']                # Desired body moment
-
-    # Cost components by cumulative sum of squared norms
-    position_error = np.linalg.norm(actual_pos - des_pos, axis=1)**2
-    velocity_error = np.linalg.norm(actual_vel - des_vel, axis=1)**2
-    yaw_error = (actual_yaw - desired_yaw)**2
-    # print(f"yaw_error: {yaw_error}")
-    tracking_cost = position_error + velocity_error + yaw_error
-
-    # control effort
-    thrust_error = cmd_thrust**2
-    moment_error = np.linalg.norm(cmd_moment, axis=1)**2
-    control_cost = thrust_error + moment_error
-
-    sim_cost = np.sum(tracking_cost + robust_c * control_cost)
-
-    # return sim_cost
-    return np.sum(position_error)
-
-def compute_cost_mean(sim_result):
+def compute_cost(sim_result):
     """
     Computes the cost from the output of a simulator instance.
     Inputs:
@@ -288,9 +269,176 @@ def compute_cost_mean(sim_result):
 
     return sim_cost
 
+
+def get_H_A_b_coeffs(points, delta_t, v_avg, t_keyframes, poly_degree, yaw_poly_degree, v_max, v_start, v_end, yaw, yaw_rate_max):
+    """
+    """
+    # Compute the distances between each waypoint.
+    seg_dist = np.linalg.norm(np.diff(points, axis=0), axis=1)
+    seg_mask = np.append(True, seg_dist > 1e-1)
+    points = points[seg_mask, :]
+
+    null = False
+
+    m = points.shape[0] - 1  # Get the number of segments
+
+    # If two or more waypoints remain, solve min snap
+    if points.shape[0] >= 2:
+        ################## Time allocation
+        delta_t = (
+            seg_dist / v_avg
+        )  # Compute the segment durations based on the average velocity
+        t_keyframes = np.concatenate(
+            ([0], np.cumsum(delta_t))
+        )  # Construct time array which indicates when the quad should be at the i'th waypoint.
+
+        ################## Cost function
+        # First get the cost segment for each matrix:
+        H_pos = [H_fun(delta_t[i], k=poly_degree) for i in range(m)]
+        H_yaw = [H_fun(delta_t[i], k=yaw_poly_degree) for i in range(m)]
+
+        # Now concatenate these costs using block diagonal form:
+        P_pos = spl.block_diag(*H_pos)
+        P_yaw = spl.block_diag(*H_yaw)
+
+        # Lastly the linear term in the cost function is 0
+        q_pos = np.zeros(((poly_degree + 1) * m, 1))
+        q_yaw = np.zeros(((yaw_poly_degree + 1) * m, 1))
+
+        ################## Constraints for each axis
+        (Ax, bx, Gx, hx) = get_1d_constraints(
+            points[:, 0],
+            delta_t,
+            m,
+            k=poly_degree,
+            vmax=v_max,
+            vstart=v_start[0],
+            vend=v_end[0],
+        )
+        (Ay, by, Gy, hy) = get_1d_constraints(
+            points[:, 1],
+            delta_t,
+            m,
+            k=poly_degree,
+            vmax=v_max,
+            vstart=v_start[1],
+            vend=v_end[1],
+        )
+        (Az, bz, Gz, hz) = get_1d_constraints(
+            points[:, 2],
+            delta_t,
+            m,
+            k=poly_degree,
+            vmax=v_max,
+            vstart=v_start[2],
+            vend=v_end[2],
+        )
+        (Ayaw, byaw, Gyaw, hyaw) = get_1d_constraints(
+            yaw, delta_t, m, k=yaw_poly_degree, vmax=yaw_rate_max
+        )
+
+        ################## Solve for x, y, z, and yaw
+
+        ### Only in the fully constrained situation is there a unique minimum s.t. we can solve the system Ax = b.
+        # c_opt_x = np.linalg.solve(Ax,bx)
+        # c_opt_y = np.linalg.solve(Ay,by)
+        # c_opt_z = np.linalg.solve(Az,bz)
+        # c_opt_yaw = np.linalg.solve(Ayaw,byaw)
+
+        ### Otherwise, in the underconstrained case or when inequality constraints are given we solve the QP.
+        c_opt_x = cvxopt_solve_qp(P_pos, q=q_pos, G=Gx, h=hx, A=Ax, b=bx)
+        c_opt_y = cvxopt_solve_qp(P_pos, q=q_pos, G=Gy, h=hy, A=Ay, b=by)
+        c_opt_z = cvxopt_solve_qp(P_pos, q=q_pos, G=Gz, h=hz, A=Az, b=bz)
+        c_opt_yaw = cvxopt_solve_qp(P_yaw, q=q_yaw, G=Gyaw, h=hyaw, A=Ayaw, b=byaw)
+        # # print the number of coeffs
+        # print("Number of Coefficients for each trajectory dimension:")
+        # print(f"X-axis: {len(c_opt_x)} coefficients")
+        # print(f"Y-axis: {len(c_opt_y)} coefficients")
+        # print(f"Z-axis: {len(c_opt_z)} coefficients")
+        # print(f"Yaw: {len(c_opt_yaw)} coefficients")
+    
+        # call modify_reference directly after computing the min snap coeffs and use the returned coeffs in the rest of the class
+        # self.nan_encountered = False
+
+        # if use_neural_network:
+        min_snap_coeffs = np.concatenate([c_opt_x, c_opt_y, c_opt_z, c_opt_yaw])
+
+        # get H by concatenating H_pos and H_yaw
+        H = spl.block_diag(
+            *[
+                0.5 * (P_pos.T + P_pos),
+                0.5 * (P_pos.T + P_pos),
+                0.5 * (P_pos.T + P_pos),
+                0.5 * (P_yaw.T + P_yaw),
+            ]
+        )  # cost fuction is the same for x, y, z
+
+        # get A by concatenating Ax, Ay, Az, Ayaw
+        A = spl.block_diag(*[Ax, Ay, Az, Ayaw])
+
+        # get b by concatenating bx, by, bz, byaw
+        b = np.concatenate((bx, by, bz, byaw))
+
+        return H, A, b
+
+def write_to_csv(output_file, row):
+    with open(output_file, 'a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(row)
+    return None
+
 # Function to run simulation and compute cost
-def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_network, regularizer=None, vehicle=None, controller=None, robust_c=1.0):
+def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_network, regularizer=None, vehicle=None, controller=None):
     traj = MinSnap(points=waypoints, yaw_angles=yaw_angles, v_avg=vavg, use_neural_network=use_neural_network, regularizer=regularizer)
+    # (H, A, b, min_snap_coeffs) = MinSnap(points=waypoints, yaw_angles=yaw_angles, v_avg=vavg, use_neural_network=use_neural_network, regularizer=regularizer)
+    # H = traj.H
+    # A = traj.A
+    # b = traj.b
+    # min_snap_coeffs = traj.min_snap_coeffs
+    # cost_mat = spl.block_diag(*[_cost_matrix(order, 4, d) for d in durations])
+    # # print("cost_mat!!!!!!!!!!!!!!!!!", cost_mat)
+    # A_coeff = _coeff_constr_A(ts, n, num_coeffs)
+    # b_coeff = _coeff_constr_b(wp.T, ts, n)
+
+    # cost_mat_full = spl.block_diag(*[cost_mat for i in range(p)])
+    # A_coeff_full = spl.block_diag(*[A_coeff for i in range(p)])
+    # b_coeff_full = jnp.ravel(b_coeff)
+
+    # nn_coeff, pred, nan_encountered = jvp(modify_reference, regularizer,
+    #                 jnp.zeros(H.shape),
+    #                 jnp.zeros(A.shape),
+    #                 jnp.zeros(b.shape),
+    #                 jnp.zeros(min_snap_coeffs.shape))
+    # nn_coeff, pred, nan_encountered = modify_reference(
+    #                 regularizer,
+    #                 jnp.zeros(H.shape),
+    #                 jnp.zeros(A.shape),
+    #                 jnp.zeros(b.shape),
+    #                 jnp.zeros(min_snap_coeffs.shape)
+    #             )
+
+    # def nn_cost(coeffs):
+    #     return coeffs.T @ H @ coeffs #+ regularizer(coeffs)[0]
+    
+    
+    # def projection(coeffs):
+    #     return coeffs - A.T @ np.linalg.inv(A @ A.T) @ (A @ coeffs - b)
+    
+    # grad_fn = lambda coeffs: jax.grad(nn_cost)(coeffs)
+
+    
+    # # def my_pgd_solver(coeffs, maxiter, stepsize, tol, rho, beta, init_alpha, projection, grad, f):
+        
+
+    # methods = {"PGD": cs.ProjectedGD(nn_cost, grad_fn, projection, ss.Backtracking(rule_type="Armijo", rho=0.99, beta=0.1, init_alpha=1.))
+    #       }
+    
+    # max_iter = 50
+    # tol = 1e-1
+
+    # x = methods["PGD"].solve(x0=np.zeros(min_snap_coeffs.shape), max_iter=max_iter, tol=tol, disp=1)
+    # print(x)
+
     nan_encountered = traj.nan_encountered  # Flag indicating if NaN was encountered
 
     sim_instance = Environment(vehicle=vehicle, controller=controller, trajectory=traj, wind_profile=None, sim_rate=100)
@@ -306,25 +454,53 @@ def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_netw
 
     waypoint_times = traj.t_keyframes
     sim_result = sim_instance.run(t_final=traj.t_keyframes[-1], use_mocap=False, terminate=False, plot=False)
-    trajectory_cost = compute_cost(sim_result, robust_c=robust_c)
 
-    return sim_result, trajectory_cost, waypoint_times, nan_encountered
+    # visualize the trajectory
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot(sim_result['state']['x'][:, 0], sim_result['state']['x'][:, 1], sim_result['state']['x'][:, 2], 'b--')
+    ax.plot(sim_result['flat']['x'][:, 0], sim_result['flat']['x'][:, 1], sim_result['flat']['x'][:, 2], 'r-.')
+    ax.scatter(waypoints[:, 0], waypoints[:, 1], waypoints[:, 2], c='k', marker='o')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    # save the figure if using nn
+    plt.savefig("/workspace/data_output/sim_figures_safety/trajectory"+str(use_neural_network)+".png")
+
+    # Check the trajectory constraints after simulation
+    valid_trajectory = all(z > 0 and -2 < x < 2 and -2 < y < 2 for x, y, z in sim_result['state']['x'])
+    # valid_trajectory if using nn
+    print("valid_trajectory: ", valid_trajectory, "; if using nn: ", use_neural_network)
+
+    if not valid_trajectory or nan_encountered:
+        return None, None, None, False, None
+
+    trajectory_cost = compute_cost(sim_result)
+    print(trajectory_cost)
+
+    # Now extract the polynomial coefficients for the trajectory.
+    pos_poly = traj.x_poly
+    yaw_poly = traj.yaw_poly
+
+    summary_output = np.concatenate((np.array([trajectory_cost]), pos_poly.ravel(), yaw_poly.ravel(), waypoints.ravel()))
+
+    return sim_result, trajectory_cost, waypoint_times, nan_encountered, traj, summary_output
 
 def plot_results(sim_result_init, sim_result_nn, waypoints, initial_cost, predicted_cost, filename=None, waypoints_time=None):
-    #     # Compute yaw angles from quaternions
-    # def compute_yaw_from_quaternion(quaternions):
-    #     R_matrices = R.from_quat(quaternions).as_matrix()
-    #     b3 = R_matrices[:, :, 2]
-    #     H = np.zeros((len(quaternions), 3, 3))
-    #     for i in range(len(quaternions)):
-    #         H[i, :, :] = np.array([
-    #             [1 - (b3[i, 0] ** 2) / (1 + b3[i, 2]), -(b3[i, 0] * b3[i, 1]) / (1 + b3[i, 2]), b3[i, 0]],
-    #             [-(b3[i, 0] * b3[i, 1]) / (1 + b3[i, 2]), 1 - (b3[i, 1] ** 2) / (1 + b3[i, 2]), b3[i, 1]],
-    #             [-b3[i, 0], -b3[i, 1], b3[i, 2]],
-    #         ])
-    #     Hyaw = np.transpose(H, axes=(0, 2, 1)) @ R_matrices
-    #     actual_yaw = np.arctan2(Hyaw[:, 1, 0], Hyaw[:, 0, 0])
-    #     return actual_yaw
+        # Compute yaw angles from quaternions
+    def compute_yaw_from_quaternion(quaternions):
+        R_matrices = R.from_quat(quaternions).as_matrix()
+        b3 = R_matrices[:, :, 2]
+        H = np.zeros((len(quaternions), 3, 3))
+        for i in range(len(quaternions)):
+            H[i, :, :] = np.array([
+                [1 - (b3[i, 0] ** 2) / (1 + b3[i, 2]), -(b3[i, 0] * b3[i, 1]) / (1 + b3[i, 2]), b3[i, 0]],
+                [-(b3[i, 0] * b3[i, 1]) / (1 + b3[i, 2]), 1 - (b3[i, 1] ** 2) / (1 + b3[i, 2]), b3[i, 1]],
+                [-b3[i, 0], -b3[i, 1], b3[i, 2]],
+            ])
+        Hyaw = np.transpose(H, axes=(0, 2, 1)) @ R_matrices
+        actual_yaw = np.arctan2(Hyaw[:, 1, 0], Hyaw[:, 0, 0])
+        return actual_yaw
 
     actual_yaw_init = compute_yaw_from_quaternion(sim_result_init['state']['q'])
     actual_yaw_nn = compute_yaw_from_quaternion(sim_result_nn['state']['q'])
@@ -343,6 +519,7 @@ def plot_results(sim_result_init, sim_result_nn, waypoints, initial_cost, predic
     ax_traj.set_xlabel("X", fontsize=16)
     ax_traj.set_ylabel("Y", fontsize=16)
     ax_traj.set_zlabel("Z", fontsize=16)
+    ax_traj.set_zlim(0, 1)
     ax_traj.legend(['Initial Actual', 'Initial Ref', 'NN Actual', 'NN Ref', 'Waypoints'], fontsize=14)
     cost_text = f"Initial Cost: {initial_cost:.2f}\nSimulated Cost: {predicted_cost:.2f}"
     ax_traj.text2D(0.04, 0.02, cost_text, transform=ax_traj.transAxes, fontsize=18)
@@ -407,7 +584,7 @@ def plot_results(sim_result_init, sim_result_nn, waypoints, initial_cost, predic
 
     # close the figure
     plt.close(fig)
-
+    
 def main():
     # Define the lists to keep track of times for the simulations
     times_nn = []
@@ -415,7 +592,7 @@ def main():
     times_poly = []
 
     # Initialize neural network
-    rho = 1
+    rho = 0.1
     input_size = 96  # number of coeff
     # num_data = 72
 
@@ -427,34 +604,42 @@ def main():
     learning_rate = yaml_data["learning_rate"]
 
     # Load the trained model
-    model = MLP(num_hidden=num_hidden, num_outputs=1)
+    # model = MLP(num_hidden=num_hidden, num_outputs=1)
     # Printing the model shows its attributes
-    print(model)
-
-    rng = jax.random.PRNGKey(427)
-    rng, inp_rng, init_rng = jax.random.split(rng, 3)
-    inp = jax.random.normal(
-        inp_rng, (1, input_size)
-    )  # Batch size 32, input size 2012
-    # Initialize the model
-    params = model.init(init_rng, inp)
-
-    optimizer = optax.sgd(learning_rate=learning_rate, momentum=0.9)
-
-    model_state = train_state.TrainState.create(
-        apply_fn=model.apply, params=params, tx=optimizer
-    )
-
+    # print(model)
+    model = MLP(num_hidden=num_hidden, num_outputs=1)
     model_save = yaml_data["save_path"] + str(rho)
-    print("model_save", model_save)
-    
-    # trained_model_state = restore_checkpoint(model_state, model_save, 7)
-
-  
-    # vf = trained_model_state
     trained_model_state = flax.core.freeze(restore_checkpoint(None, model_save, 7))
     vf = (model, trained_model_state["params"])
 
+    # rng = jax.random.PRNGKey(427)
+    # rng, inp_rng, init_rng = jax.random.split(rng, 3)
+    # inp = jax.random.normal(
+    #     inp_rng, (1, input_size)
+    # )  # Batch size 32, input size 2012
+    # # Initialize the model
+    # params = model.init(init_rng, inp)
+    # # params = model.init()
+
+    # optimizer = optax.sgd(learning_rate=learning_rate, momentum=0.9)
+
+    # model_state = train_state.TrainState.create(
+    #     apply_fn=model.apply, params=params, tx=optimizer
+    # )
+
+    # model_save = yaml_data["save_path"] + str(rho)
+    # print("model_save", model_save)
+    
+    # trained_model_state = restore_checkpoint(model_state, model_save, 7)
+
+    # print("Current model structure:", model)
+    # print("Model parameters:", params)
+
+    # Verify the path to the checkpoint
+    # print("Checkpoint path:", model_save)
+
+    # vf = model.bind(trained_model_state.params)
+    # vf = trained_model_state
 
     # Define the quadrotor parameters
     world_size = 10
@@ -474,42 +659,55 @@ def main():
     world = World.empty([-world_size/2, world_size/2, -world_size/2, world_size/2, -world_size/2, world_size/2])
     vehicle = Multirotor(quad_params)
     controller = SE3Control(quad_params)
+    controller_with_drag_compensation = SE3Control(quad_params, drag_compensation=True)
 
-    predicted_cost_diffs = []
-    true_cost_diffs = []
+    traj_data = pd.DataFrame(columns=['Seed', 'Waypoints', 'Coefficients'])
 
-    cost_result = []
-
-    # Loop for seeds=[5, 7, 10, 11, 12, 14, 22, 26, 27, 28, 29, 38, 42, 44, 47, 48, 49, 51, 55, 56, 62, 64, 65, 68, 69, 70, 74, 75, 77, 88, 92, 94, 95, 96, 98]
-    # seeds = [5, 7, 10, 11, 12, 14, 22, 26, 27, 28, 29, 38, 42, 44, 47, 48, 49, 51, 55, 56, 62, 64, 65, 68, 69, 70, 74, 75, 77, 88, 92, 94, 95, 96, 98]
-    for i in range(100):
-        # Sample waypoints
+    # Loop for 100 trajectories
+    # for i in range(20):
+    valid_trajectory = False
+    while not valid_trajectory:
+        # # Sample waypoints
         waypoints = sample_waypoints(num_waypoints=num_waypoints, world=world, world_buffer=world_buffer, 
                                         min_distance=min_distance, max_distance=max_distance, 
-                                        start_waypoint=start_waypoint, end_waypoint=end_waypoint, rng=None, seed=i)
+                                        start_waypoint=start_waypoint, end_waypoint=end_waypoint, rng=None, seed=29)
+
+        # waypoints = np.array([[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]])
+        # waypoints = np.array([[0, 0, 0], [0.5, 0, 4], [1, 1.5, 4], [0, 1.5, 3]])
         
         # Sample yaw angles
-        yaw_angles = sample_yaw(seed=i, waypoints=waypoints, yaw_min=yaw_min, yaw_max=yaw_max)
+        # yaw_angles = sample_yaw(seed=i, waypoints=waypoints, yaw_min=yaw_min, yaw_max=yaw_max)
 
         yaw_angles_zero = np.zeros(len(waypoints))
 
         # /workspace/rotorpy/rotorpy/sim_figures/
-        figure_path = "/workspace/data_output/sim_figures_with_rho"+str(rho)
+        figure_path = "/workspace/data_output/sim_figures_safety"
 
-        start_time = time.time()
-        total_time = 0
+        sim_result_init, trajectory_cost_init, waypoints_time, _, _, summary_init = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=vf, vehicle=vehicle, controller=controller)
+        write_to_csv(figure_path + "/summary_init.csv", summary_init)
+        sim_result_nn, trajectory_cost_nn,_,nan_encountered, traj, summary_nn = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=True, regularizer=vf, vehicle=vehicle, controller=controller)
+        write_to_csv(figure_path + "/summary_nn.csv", summary_nn)
+        
+        if not nan_encountered and traj is not None and sim_result_init is not None and sim_result_nn is not None:
+            valid_trajectory = True
+            plot_results(sim_result_init, sim_result_nn, waypoints, trajectory_cost_init, trajectory_cost_nn, filename=figure_path + f"/trajectory_{1}.png", waypoints_time=waypoints_time)
+            coeffs = traj.get_coefficients()  # Ensure this method exists in MinSnap
+            traj_data = traj_data.append({'Seed': 1, 'Waypoints': waypoints.tolist(), 'Coefficients': coeffs.tolist()}, ignore_index=True)
+
+    # save to figure_path 
+    traj_data.to_csv(figure_path + "/traj_data.csv", index=False)
+
+    """
         # run simulation and compute cost for the initial trajectory
-        sim_result_init, trajectory_cost_init, waypoints_time, _ = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller, robust_c=rho)
+        sim_result_init, trajectory_cost_init, waypoints_time, _ = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller)
         # run simulation and compute cost for the modified trajectory
-        sim_result_nn, trajectory_cost_nn,_,nan_encountered = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=True, regularizer=vf, vehicle=vehicle, controller=controller, robust_c=rho)
+        sim_result_nn, trajectory_cost_nn,_,nan_encountered = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=True, regularizer=vf, vehicle=vehicle, controller=controller)
         print("nan_encountered in inference", nan_encountered)
         if nan_encountered == False:
             print(f"Trajectory {i} initial cost: {trajectory_cost_init}")
             print(f"Trajectory {i} neural network modified cost: {trajectory_cost_nn}")
             cost_diff = trajectory_cost_nn - trajectory_cost_init
-            cost_ratio = trajectory_cost_nn / trajectory_cost_init
-            cost_result.append((trajectory_cost_init, trajectory_cost_nn, cost_diff, cost_ratio))
-            
+            cost_differences.append((trajectory_cost_init, trajectory_cost_nn, cost_diff))
             plot_results(sim_result_init, sim_result_nn, waypoints, trajectory_cost_init, trajectory_cost_nn, filename=figure_path + f"/trajectory_{i}.png", waypoints_time=waypoints_time)
 
         end_time = time.time()
@@ -518,11 +716,9 @@ def main():
         print(f"Elapsed time for trajectory {i}: {elapsed_time} seconds")
 
     # Save the cost data to a CSV file
-    costs_df = pd.DataFrame(cost_result, columns=['Initial Cost', 'NN Modified Cost', 'Cost Difference', 'Cost Ratio'])
-    # save to figure path
-    costs_df.to_csv(figure_path + "/mean_cost_data.csv", index=False)
-    # costs_df.to_csv("/workspace/data_output/cost_data.csv", index=False)
-
+    costs_df = pd.DataFrame(cost_differences, columns=['Initial Cost', 'NN Modified Cost', 'Cost Difference'])
+    costs_df.to_csv("/workspace/data_output/cost_data.csv", index=False)
+    """
     # costs_df = pd.read_csv("/workspace/data_output/cost_data.csv")
     # plt.figure()
     # plt.boxplot(costs_df['Cost Difference'], showfliers=False)  # Set showfliers=False to hide outliers

@@ -65,8 +65,11 @@ class TrajDataset(Dataset):
         self.data = np.loadtxt(file_path,delimiter=",",skiprows=1,)
 
         # Assuming the first column is 'traj_number', the second is 'cost', and the rest are coefficients
-        self.coeffs = self.data[:, 2:]  # All coefficient columns
-        self.costs = self.data[:, 1]  # Cost column
+        self.coeffs = self.data[:, 5:]  # All coefficient columns
+        self.costs = self.data[:, 4]  # Cost column
+        # take mean of costs
+        self.costs = np.mean(self.costs)
+        # self.costs = np.ls:og(self.costs)
         # self.coeffs = torch.tensor(self.data[:, 2:], dtype=torch.float32, device=device)
         # self.costs = torch.tensor(self.data[:, 1], dtype=torch.float32, device=device)
 

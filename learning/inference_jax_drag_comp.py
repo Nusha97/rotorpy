@@ -390,7 +390,7 @@ def main():
     # Define the quadrotor parameters
     world_size = 10
     num_waypoints = 4
-    vavg = 2
+    vavg = 1
     random_yaw = False
     yaw_min = -0.85*np.pi
     yaw_max = 0.85*np.pi
