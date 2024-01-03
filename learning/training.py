@@ -52,24 +52,7 @@ def compute_traj(sim_data, rho=1, horizon=501, full_state=False):
     actual_traj_z = sim_data[:, 4]
     # col I-L quaternion
     actual_traj_quat = sim_data[:, 8:12]
-    # quat2euler takes a 4 element sequence: w, x, y, z of quaternion
-    # actual_traj_quat = np.hstack((actual_traj_quat[:, 3:4], actual_traj_quat[:, 0:3]))
-    # (cur_roll, cur_pitch, cur_yaw) = tf.transformations.euler_from_quaternion(actual_traj_quat)
-    # 4 element sequence: w, x, y, z of quaternion
-    # print("actual_traj_quat's shape: ", actual_traj_quat.shape)
-    # actual_yaw = np.zeros(len(actual_traj_quat))
-    # (cur_roll, cur_pitch, cur_yaw) = (
-    #     np.zeros(len(actual_traj_quat)),
-    #     np.zeros(len(actual_traj_quat)),
-    #     np.zeros(len(actual_traj_quat)),
-    # )
-    # for i in range(len(actual_traj_quat)):
-    #     (cur_roll[i], cur_pitch[i], cur_yaw[i]) = euler.quat2euler(actual_traj_quat[i])
-    #     actual_yaw[i] = cur_yaw[i]
-    # actual_traj = np.vstack((actual_traj_x, actual_traj_y, actual_traj_z, actual_yaw)).T
-    # debug: print the first 10 actual_traj
-    # print("actual_traj: ", actual_traj[:10, :])
-    # print("actual_traj's type: ", type(actual_traj))
+
     euler_actual = R.from_quat(actual_traj_quat).as_euler("zyx", degrees=False)
     actual_yaw = euler_actual[:, 0]
     actual_traj = np.vstack((actual_traj_x, actual_traj_y, actual_traj_z, actual_yaw)).T
@@ -81,33 +64,6 @@ def compute_traj(sim_data, rho=1, horizon=501, full_state=False):
     # get the angular velocity from odometry: col M-O
     odom_ang_vel = sim_data[:, 12:15]
 
-    """
-    # coverting quaternion to euler angle and get the angular velocity
-    # col BO-BR desired orientation from so3 controller(quaternion)
-    input_traj_quat = sim_data[:, 66:70]
-    # (cmd_roll, cmd_pitch, cmd_yaw) = tf.transformations.euler_from_quaternion(input_traj_quat)
-    input_traj_yaw = np.zeros(len(input_traj_quat))
-    (cmd_roll, cmd_pitch, cmd_yaw) = (
-        np.zeros(len(input_traj_quat)),
-        np.zeros(len(input_traj_quat)),
-        np.zeros(len(input_traj_quat)),
-    )
-    for i in range(len(input_traj_quat)):
-        (cmd_roll[i], cmd_pitch[i], cmd_yaw[i]) = euler.quat2euler(input_traj_quat[i])
-
-    # devided by time difference to get the angular velocity x, y, z
-    input_traj_ang_vel = (
-        np.diff(np.vstack((cmd_roll, cmd_pitch, cmd_yaw)).T, axis=0) / 0.01
-    )
-    # add the first element to the first row, so that the shape is the same as input_traj_thrust
-    input_traj_ang_vel = np.vstack((input_traj_ang_vel[0, :], input_traj_ang_vel))
-    # print("input_traj_ang_vel's shape: ", input_traj_ang_vel.shape)
-    
-    input_traj = np.hstack((input_traj_thrust.reshape(-1, 1), input_traj_ang_vel))
-    """
-
-    # input_traj = np.hstack((input_traj_thrust.reshape(-1, 1), odom_ang_vel))
-    # input_traj is sum of squares of motor speeds for 4 individual motors, col 19-22
     motor_speed = sim_data[:, 18:22]
     input_traj = np.sqrt(np.sum(motor_speed**2, axis=1)).reshape(-1, 1)
 
@@ -159,9 +115,7 @@ def compute_cum_tracking_cost(ref_traj, actual_traj, input_traj, horizon, N, rho
         des_yaw = angle_wrap(np.arctan2(unit_vec[:, 1], unit_vec[:, 0]))
         des_yaw = np.append(des_yaw, des_yaw[-1])
         print("des_yaw: ", des_yaw)
-        # print("delta yaw: ", act[:, 3] - r0[:, 3])
-        # print("angle_wrap: ", angle_wrap(act[:, 3] - r0[:, 3]))
-        # print("yaw cost: ", angle_wrap(act[:, 3] - r0[:, 3]))
+
         xcost.append(
             rho
             * (
@@ -173,13 +127,6 @@ def compute_cum_tracking_cost(ref_traj, actual_traj, input_traj, horizon, N, rho
             + 0.001 * (1 / horizon) * np.linalg.norm(input_traj[i]) ** 2
             # + np.linalg.norm(input_traj[i]) ** 2  # Removed 0.1 multiplier
         )
-        # print("cost for the input_traj: ", np.linalg.norm(input_traj[i]))
-    # print("rho: ", rho)
-    # print(
-    #     "cost for the deviation from reference: ",
-    #     np.linalg.norm(act[:, :3] - r0[:, :3], axis=1) ** 2
-    #     + angle_wrap(act[:, 3] - r0[:, 3]) ** 2,
-    # )
 
     xcost.reverse()
     cost = []
@@ -197,29 +144,9 @@ def angle_wrap(theta):
 
 
 def main():
-    horizon = 502
     rho = 1000
 
-    rhos = [0, 1, 5, 10, 20, 50, 100]
-    gamma = 1
-    # Load bag
-    # sim_data = load_bag('/home/anusha/2022-09-27-11-49-40.bag')
-    # sim_data = load_bag("/home/anusha/2023-02-27-13-35-15.bag")
-    # sim_data = load_bag("/home/anusha/dragonfly1-2023-04-12-12-18-27.bag")
-    ### Load the csv file here with header
-    # cost_coeff_data = np.loadtxt(
-    #     "/workspace/data_output/data.csv",
-    #     delimiter=",",
-    #     skiprows=1,
-    # )
-        
-    # # no need times
-    # ref_traj, actual_traj, input_traj, cost_traj, times = compute_traj(
-    #     sim_data=sim_data, rho=rho, horizon=horizon
-    # )
-
     with open(
-        # r"/home/anusha/Research/ws_kr/src/layered_ref_control/src/layered_ref_control/data/params.yaml"
         r"/workspace/rotorpy/learning/params.yaml"
     ) as f:
         yaml_data = yaml.load(f, Loader=yaml.RoundTripLoader)
@@ -293,26 +220,8 @@ def main():
     """
     # Path to your CSV file
     csv_file_path = "/workspace/data_output/data_diff_rho.csv"
-    # cost_coeff_data = np.loadtxt(
-    #     "/workspace/data_output/data.csv",
-    #     delimiter=",",
-    #     skiprows=1,
-    # )
-
-    # # Read the CSV file
-    # df = pd.read_csv(csv_file_path)
-
-    # # Assuming the first column is 'traj_number' and the second column is 'cost'
-    # # and the rest of the columns are coefficients
-    # number_of_coefficients = len(df.columns) - 2  # Subtracting the non-coefficient columns
-    # print("Number of coefficients:", number_of_coefficients)
-
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # train_dataset = TrajDataset(file_path=csv_file_path,device=device)
 
     train_dataset = TrajDataset(file_path=csv_file_path, feature_range=(-1, 1))
-    # train_data = train_dataset
-    # print("Training data length: ", len(train_data))
 
     # Split the dataset into training and testing subsets
     train_data, test_data = train_test_split(
@@ -414,8 +323,6 @@ def main():
     file_name = plots_dir + rho_value + '_error_hist_train.png'
     plt.savefig(file_name)
     plt.close()  # Close the plot
-    # # Show the plot
-    # plt.show()
 
     # Calculate the percentage error relative to the true cost
     # Avoid division by zero by adding a small epsilon where true cost is zero

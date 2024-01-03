@@ -53,25 +53,6 @@ def H_fun(dt, k=7):
 
     H = np.zeros((k + 1, k + 1))
 
-    ######## TODO: implement automatic cost function based on the desired cost functional (snap or jerk) and the order of the polynomial, k.
-    # # Get the numerical factors for the fourth derivative of the polynomial of order k.
-    # # E.g. for x(t) = c_0 + c_1*t + c_2*t^2 + c_3*t^3 + c_4*t^4 the fourth derivative is x(t) = 24*c_4, so the factor is just [24]
-    # factors = [(j-3)*(j-2)*(j-1)*j*(1)**(j-4) for j in range(4, k+1)]
-    # factors.reverse()
-    # snap_poly = np.poly1d(factors)  # Reverse to make use of numpy's polynomial functions.
-
-    # # Use this to construct the cost function corresponding to snap.
-    # squared_snap_poly = snap_poly**2
-
-    # # Now integrate.
-    # integrated_snap_poly = np.polyint(squared_snap_poly)
-    # integrated_snap_coeff = np.flip(integrated_snap_poly.c)
-
-    # H = np.zeros((4,4))
-    # for i in range(4):
-    #     for j in range(4):
-    #         H[i, j] = integrated_snap_poly[i+j]/2
-
     seventh_order_cost = np.array(
         [
             [576 * dt, 1440 * dt**2, 2880 * dt**3, 5040 * dt**4],
@@ -348,26 +329,11 @@ class MinSnap(object):
                 self.yaw, self.delta_t, m, k=yaw_poly_degree, vmax=yaw_rate_max
             )
 
-            ################## Solve for x, y, z, and yaw
-
-            ### Only in the fully constrained situation is there a unique minimum s.t. we can solve the system Ax = b.
-            # c_opt_x = np.linalg.solve(Ax,bx)
-            # c_opt_y = np.linalg.solve(Ay,by)
-            # c_opt_z = np.linalg.solve(Az,bz)
-            # c_opt_yaw = np.linalg.solve(Ayaw,byaw)
-
-            ### Otherwise, in the underconstrained case or when inequality constraints are given we solve the QP.
             c_opt_x = cvxopt_solve_qp(P_pos, q=q_pos, G=Gx, h=hx, A=Ax, b=bx)
             c_opt_y = cvxopt_solve_qp(P_pos, q=q_pos, G=Gy, h=hy, A=Ay, b=by)
             c_opt_z = cvxopt_solve_qp(P_pos, q=q_pos, G=Gz, h=hz, A=Az, b=bz)
             c_opt_yaw = cvxopt_solve_qp(P_yaw, q=q_yaw, G=Gyaw, h=hyaw, A=Ayaw, b=byaw)
-            # # print the number of coeffs
-            # print("Number of Coefficients for each trajectory dimension:")
-            # print(f"X-axis: {len(c_opt_x)} coefficients")
-            # print(f"Y-axis: {len(c_opt_y)} coefficients")
-            # print(f"Z-axis: {len(c_opt_z)} coefficients")
-            # print(f"Yaw: {len(c_opt_yaw)} coefficients")
-        
+
             # call modify_reference directly after computing the min snap coeffs and use the returned coeffs in the rest of the class
             self.nan_encountered = False
 
@@ -599,18 +565,6 @@ class MinSnap(object):
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from matplotlib import cm
-
-    # waypoints = np.array([[0,0,0],
-    #                       [1,0,0],
-    #                       [1,1,0],
-    #                       [0,1,0],
-    #                       [0,2,0],
-    #                       [2,2,0]
-    #                       ])
-    # yaw_angles = np.array([0, np.pi/2, 0, np.pi/4, 3*np.pi/2, 0])
-    # v_avg = 2
-    # v_start = [0, 0, 0]
-    # v_end = [0, 0, 0]
 
     desired_radius = 3
     desired_freq = 0.2  # In Hz (1/s). To convert to rad/s, we multiply by 2*pi

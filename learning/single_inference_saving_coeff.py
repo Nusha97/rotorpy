@@ -1,8 +1,6 @@
-#! /usr/bin/env python3
-
 """
-Generate training data
-simple replanning with lissajous trajectory with fixed waypoints
+run inference on the trained model once
+save the coefficients of the trajectory
 """
 
 import csv
@@ -218,11 +216,6 @@ def compute_cost_mean(sim_result):
     # Cost components
     position_error = np.linalg.norm(x - x_des, axis=1).mean()
     velocity_error = np.linalg.norm(v - v_des, axis=1).mean()
-
-    # Calculate attitude error (assuming quaternion representation)
-    # attitude_error = np.linalg.norm(q - q_des, axis=1).mean()  # Modify this based on your attitude representation
-    # Attitude error (for quaternions)
-    # attitude_error = quaternion_distance(q, q_des).mean()
 
     # Input cost from thrust and body moment
     # Compute total cost as a weighted sum of tracking errors
@@ -488,10 +481,6 @@ def plot_results_only_for_drag(sim_result_drag,sim_result_nn, waypoints, drag_co
     ax_traj.plot3D(sim_result_nn["flat"]["x"][:, 0], sim_result_nn["flat"]["x"][:, 1], sim_result_nn["flat"]["x"][:, 2], color='lightskyblue', linestyle='--', linewidth=4, label='Drag-aware Reference')
     ax_traj.plot3D(sim_result_nn["state"]["x"][:, 0], sim_result_nn["state"]["x"][:, 1], sim_result_nn["state"]["x"][:, 2], color='blue', linestyle='-', linewidth=4, label='Drag-aware Actual')
     
-    # # set x, y, z limits
-    # ax_traj.set_xlim(-3, 3)
-    # ax_traj.set_ylim(-3, 3)
-    # ax_traj.set_zlim(-3, 3)
     # Waypoints
     ax_traj.scatter(waypoints[:, 0], waypoints[:, 1], waypoints[:, 2], c='k', marker='o', s=60, label='Waypoints')
 
@@ -703,21 +692,6 @@ def main():
 
     model_save = yaml_data["save_path"] + str(rho)
     print("model_save", model_save)
-    
-    # trained_model_state = restore_checkpoint(model_state, model_save, 7)
-
-  
-    # vf = trained_model_state
-
-    # trained_model_state = flax.core.freeze(restore_checkpoint(None, model_save, 7))
-    # vf = (model, trained_model_state["params"])
-
-    # trained_model_state = restore_checkpoint(model_state, model_save, 7)
-    
-    # # first bind the model and then apply the params in sgd_jax
-    # trained_model = model.bind(trained_model_state.params)
-
-    # vf = trained_model
 
     trained_model_state = flax.core.freeze(restore_checkpoint(None, model_save, 7))
     vf = (model, trained_model_state["params"])
@@ -803,55 +777,6 @@ def main():
     # costs_df = pd.DataFrame(cost_differences, columns=['Initial Cost', 'NN Modified Cost', 'Cost Difference'])
     # # save to figure path
     # costs_df.to_csv(figure_path + "/cost_data.csv", index=False)
-    """
-    # Loop for 100 trajectories
-    for i in range(100):
-        # Sample waypoints
-        waypoints = sample_waypoints(num_waypoints=num_waypoints, world=world, world_buffer=world_buffer, 
-                                        min_distance=min_distance, max_distance=max_distance, 
-                                        start_waypoint=start_waypoint, end_waypoint=end_waypoint, rng=None, seed=i)
-        
-        # Sample yaw angles
-        yaw_angles = sample_yaw(seed=i, waypoints=waypoints, yaw_min=yaw_min, yaw_max=yaw_max)
-
-        yaw_angles_zero = np.zeros(len(waypoints))
-
-        # /workspace/rotorpy/rotorpy/sim_figures/
-        figure_path = "/workspace/data_output/sim_figures_drag_compensation"
-
-        start_time = time.time()
-        total_time = 0
-        # run simulation and compute cost for the initial trajectory
-        sim_result_init, trajectory_cost_init, waypoints_time, _ = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller)
-        # run simulation and compute cost for the modified trajectory
-        sim_result_nn, trajectory_cost_nn,_,nan_encountered = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=True, regularizer=vf, vehicle=vehicle, controller=controller)
-        print("nan_encountered in inference", nan_encountered)
-        if nan_encountered == False:
-            print(f"Trajectory {i} initial cost: {trajectory_cost_init}")
-            print(f"Trajectory {i} neural network modified cost: {trajectory_cost_nn}")
-            cost_diff = trajectory_cost_nn - trajectory_cost_init
-            cost_differences.append((trajectory_cost_init, trajectory_cost_nn, cost_diff))
-            plot_results(sim_result_init, sim_result_nn, waypoints, trajectory_cost_init, trajectory_cost_nn, filename=figure_path + f"/trajectory_{i}.png", waypoints_time=waypoints_time)
-
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        total_time += elapsed_time
-        print(f"Elapsed time for trajectory {i}: {elapsed_time} seconds")
-
-    # Save the cost data to a CSV file
-    costs_df = pd.DataFrame(cost_differences, columns=['Initial Cost', 'NN Modified Cost', 'Cost Difference'])
-    # save to figure path
-    costs_df.to_csv(figure_path + "/cost_data.csv", index=False)
-    # costs_df.to_csv("/workspace/data_output/cost_data.csv", index=False)
-
-    # costs_df = pd.read_csv("/workspace/data_output/cost_data.csv")
-    # plt.figure()
-    # plt.boxplot(costs_df['Cost Difference'], showfliers=False)  # Set showfliers=False to hide outliers
-    # plt.title('Predicted Cost - Initial Cost Boxplot')
-    # plt.ylabel('Cost Difference')
-    # plt.savefig(figure_path + "/cost_difference_boxplot_no_outliers.png")
-    # plt.close()
-    """
 
 
 if __name__ == "__main__":

@@ -32,45 +32,8 @@ def modify_reference(
         :param numsteps: Total number of samples in the reference
         :return: ref
         """
-        # we use log(cost) during training, so we need to exponentiate it here
-        # return coeffs.T @ cost_mat_full @ coeffs + jnp.exp(regularizer[0].apply(regularizer[1], coeffs)[0])
-        # return coeffs.T @ cost_mat_full @ coeffs + regularizer.apply_fn(regularizer.params, coeffs)[0]
-        # print(regularizer(coeffs))
-        # return coeffs.T @ cost_mat_full @ coeffs + regularizer(coeffs)[0]
-        # return coeffs.T @ cost_mat_full @ coeffs + regularizer[0].apply(regularizer[1], coeffs)[0]
         return coeffs.T @ cost_mat_full @ coeffs + jnp.exp(regularizer[0].apply(regularizer[1], coeffs)[0])
-        
-    
-    # def run_optimization(coeff_init):
-    #     pg = ProjectedGradient(
-    #         nn_cost,
-    #         projection=projection_affine_set,
-    #         maxiter=1,
-    #         verbose=True,
-    #     )
-    #     sol = pg.run(coeff_init, hyperparams_proj=(A_coeff_full, b_coeff_full))
-    #     return sol.params, sol.state.error
 
-    # current_coeffs = coeff0
-    # print("Initial coefficients:", coeff0)
-    # for iter_num in range(maxiter):
-    #     new_coeffs, error = run_optimization(current_coeffs)
-    #     print(f"Iteration {iter_num}: Coefficients:", new_coeffs)
-
-    #     if np.isnan(error):
-    #         print(f"NaN encountered in iteration {iter_num}.")
-    #         if iter_num == 0:
-    #             # First iteration, return initial coefficients
-    #             return coeff0, error
-    #         else:
-    #             # Not first iteration, return last valid coefficients
-    #             return current_coeffs, error
-    #     current_coeffs = new_coeffs  # Update coefficients for next iteration
-
-    # print("Optimization completed without NaN errors.")
-    # print("Final coefficients:", current_coeffs)
-    # return current_coeffs, error
-    
     # Initialize ProjectedGradient with maxiter set to 1
     pg = ProjectedGradient(
         nn_cost,
@@ -114,28 +77,6 @@ def modify_reference(
 
     print(f"Final lowest ProximalGradient error: {best_error}")
     return best_solution, best_error, nan_encountered
-    """
-    pg = ProjectedGradient(
-        nn_cost,
-        projection=projection_affine_set,
-        # maxiter=9, # 1, if nan, return initial
-        maxiter=30,
-        # stepsize=-1e-5,
-        # maxls=10,
-        # jit = True,
-        verbose=True,
-        # tol=10
-        # implicit_diff = False,
-        # implicit_differentiation=True,  # Enable implicit differentiation
-    )
-    sol = pg.run(coeff0, hyperparams_proj=(A_coeff_full, b_coeff_full))
-
-    nan_encountered = np.isnan(sol.state.error)
-    print("nan_encountered", nan_encountered)
-    return sol.params, sol.state.error, nan_encountered
-    """
-    
-
 
 
 def main():

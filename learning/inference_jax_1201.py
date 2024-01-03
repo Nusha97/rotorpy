@@ -1,8 +1,7 @@
 #! /usr/bin/env python3
 
 """
-Generate training data
-simple replanning with lissajous trajectory with fixed waypoints
+run inference on the trained model
 """
 
 import sys
