@@ -304,7 +304,17 @@ def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_netw
     sim_instance.vehicle.initial_state = x0
 
     waypoint_times = traj.t_keyframes
-    sim_result = sim_instance.run(t_final=traj.t_keyframes[-1], use_mocap=False, terminate=False, plot=False)
+    sim_result = sim_instance.run(
+        t_final=traj.t_keyframes[-1],
+        use_mocap=False,
+        terminate=False,
+        plot=True,
+        animate_bool=True,  # Boolean: determines if the animation of vehicle state will play.
+        animate_wind=False,  # Boolean: determines if the animation will include a wind vector.
+        verbose=True,  # Boolean: will print statistics regarding the simulation.
+        fname="trial_1s",  # Filename is specified if you want to save the animation. Default location is the home directory.
+    )
+    # sim_result = sim_instance.run(t_final=traj.t_keyframes[-1], use_mocap=False, terminate=False, plot=False)
     trajectory_cost = compute_cost(sim_result, robust_c=robust_c)
 
     return sim_result, trajectory_cost, waypoint_times, nan_encountered

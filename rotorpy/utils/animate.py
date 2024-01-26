@@ -50,6 +50,7 @@ def animate(
     wind,
     animate_wind,
     world,
+    waypoints,
     filename=None,
     blit=False,
     show_axes=True,
@@ -121,8 +122,12 @@ def animate(
 
     title_artist = ax.set_title("t = {}".format(time[0]))
 
+    traj_line, = ax.plot([], [], [], 'b-', label='Trajectory')  # Initialize the trajectory line
+
     def init():
         ax.draw(fig.canvas.get_renderer())
+        ax.scatter(*waypoints.T, color='red', marker='o', label='Waypoints')
+        ax.legend(loc='upper right', shadow=True)
         return world_artists + list(quad.artists) + [title_artist]
 
     def update(frame):
@@ -133,6 +138,9 @@ def animate(
             wind=wind[frame, :],
         )
         [a.do_3d_projection(fig.canvas.get_renderer()) for a in quad.artists]
+        # ax.plot(*np.vstack([waypoints[0], position[:frame+1, :]]).T, color='blue')
+        traj_line.set_data(position[:frame+1, 0], position[:frame+1, 1])
+        traj_line.set_3d_properties(position[:frame+1, 2])
         return world_artists + list(quad.artists) + [title_artist]
 
     ani = ClosingFuncAnimation(

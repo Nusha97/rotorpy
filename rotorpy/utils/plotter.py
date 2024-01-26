@@ -422,7 +422,7 @@ class Plotter:
 
         return
 
-    def animate_results(self, animate_wind, fname=None):
+    def animate_results(self, animate_wind, waypoints=None ,fname=None):
         """
         Animate the results
 
@@ -438,6 +438,7 @@ class Plotter:
             self.wind,
             animate_wind,
             world=self.world,
+            waypoints=waypoints,
             filename=fname,
         )
         plt.show()
