@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import jax
 from flax.linen import jit
 from flax.linen import custom_vjp
-# from jax import jit
+from jax import jit
 
 
 
@@ -22,7 +22,7 @@ def modify_reference(
     """
     Running projected gradient descent on the neural network cost + min snap cost with constraints
     """
-    # @jit
+    @jit
     # @jax.jit
     def nn_cost(coeffs):
         """
@@ -39,8 +39,8 @@ def modify_reference(
         nn_cost,
         projection=projection_affine_set,
         maxiter=1,
-        # jit = True,
-        verbose=True,
+        jit = True,
+        # verbose=True,
     )
 
     # Run the initial step of ProjectedGradient
@@ -57,7 +57,7 @@ def modify_reference(
         return coeff0, best_error, nan_encountered
 
     # Total iterations, adjust this number as needed
-    total_iterations = 30
+    total_iterations = 100
 
     # Iteratively update and check for the best solution
     for _ in range(total_iterations - 1):

@@ -40,7 +40,7 @@ import time
 from rotorpy.utils.occupancy_map import OccupancyMap
 from rotorpy.controllers.quadrotor_control import SE3Control
 from rotorpy.vehicles.multirotor import Multirotor
-from rotorpy.trajectories.minsnap_nn import MinSnap
+from rotorpy.trajectories.minsnap_nn_jit import MinSnap
 from rotorpy.vehicles.crazyflie_params import quad_params
 from rotorpy.environments import Environment
 from rotorpy.world import World
@@ -308,10 +308,11 @@ def run_simulation_and_compute_cost(waypoints, yaw_angles, vavg, use_neural_netw
         t_final=traj.t_keyframes[-1],
         use_mocap=False,
         terminate=False,
-        plot=True,
-        animate_bool=True,  # Boolean: determines if the animation of vehicle state will play.
+        plot=False,
+        animate_bool=False,  # Boolean: determines if the animation of vehicle state will play.
         animate_wind=False,  # Boolean: determines if the animation will include a wind vector.
         verbose=True,  # Boolean: will print statistics regarding the simulation.
+        waypoints=waypoints,
         fname="trial_1s",  # Filename is specified if you want to save the animation. Default location is the home directory.
     )
     # sim_result = sim_instance.run(t_final=traj.t_keyframes[-1], use_mocap=False, terminate=False, plot=False)
