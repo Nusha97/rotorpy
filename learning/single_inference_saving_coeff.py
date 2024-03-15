@@ -709,6 +709,7 @@ def main():
     controller_with_drag_compensation = SE3Control(quad_params, drag_compensation=True)
     sim_result_drag, trajectory_cost_drag, _, _, summary_result_drag = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller_with_drag_compensation, robust_c=rho)
     # run simulation and compute cost for the initial trajectory
+    """
     sim_result_init, trajectory_cost_init, waypoints_time, _, summary_result_init = run_simulation_and_compute_cost(waypoints, yaw_angles_zero, vavg, use_neural_network=False, regularizer=None, vehicle=vehicle, controller=controller, robust_c=rho)
     # write_to_csv(figure_path + "/summary_data_init_header_v2_new65.csv", summary_result_init)
     # write_to_csv(output_csv_file, result)
@@ -735,6 +736,7 @@ def main():
     # costs_df = pd.DataFrame(cost_differences, columns=['Initial Cost', 'NN Modified Cost', 'Cost Difference'])
     # # save to figure path
     # costs_df.to_csv(figure_path + "/cost_data.csv", index=False)
+    """
 
 
 if __name__ == "__main__":

@@ -47,6 +47,7 @@ def animate(
     time,
     position,
     rotation,
+    desired_position,
     wind,
     animate_wind,
     world,
@@ -98,6 +99,7 @@ def animate(
     time = time[index]
     position = position[index, :]
     rotation = rotation[index, :, :]
+    desired_position = desired_position[index, :]
     wind = wind[index, :]
 
     # Set up axes.
@@ -121,8 +123,8 @@ def animate(
     world_artists = world.draw(ax)
 
     title_artist = ax.set_title("t = {}".format(time[0]))
-
-    traj_line, = ax.plot([], [], [], 'b-', label='Trajectory')  # Initialize the trajectory line
+    traj_line, = ax.plot([], [], [], 'g-', label='Executed Trajectory')  # Initialize the trajectory line
+    des_traj_line, = ax.plot([], [], [], color='lightgreen', linestyle='--', label='Reference Trajectory')  # Initialize the desired trajectory line
 
     def init():
         ax.draw(fig.canvas.get_renderer())
@@ -141,7 +143,13 @@ def animate(
         # ax.plot(*np.vstack([waypoints[0], position[:frame+1, :]]).T, color='blue')
         traj_line.set_data(position[:frame+1, 0], position[:frame+1, 1])
         traj_line.set_3d_properties(position[:frame+1, 2])
-        return world_artists + list(quad.artists) + [title_artist]
+        # return world_artists + list(quad.artists) + [title_artist]
+
+        # update the desired trajectory line
+        des_traj_line.set_data(desired_position[:frame+1, 0], desired_position[:frame+1, 1])
+        des_traj_line.set_3d_properties(desired_position[:frame+1, 2])
+        return world_artists + list(quad.artists) + [title_artist, traj_line, des_traj_line]
+
 
     ani = ClosingFuncAnimation(
         fig=fig,

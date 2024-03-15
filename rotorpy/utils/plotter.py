@@ -435,6 +435,7 @@ class Plotter:
             self.time,
             self.x,
             self.R,
+            self.x_des,
             self.wind,
             animate_wind,
             world=self.world,

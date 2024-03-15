@@ -268,6 +268,8 @@ def single_minsnap_instance(world, vehicle, controller, num_waypoints, start_way
     sim_instance.vehicle.initial_state = x0
 
     # Now run the simulator for the length of the trajectory. 
+    # name the seed inside the mp4 file
+    fname = f"seed_{seed}" if seed is not None else None
     sim_result = sim_instance.run(t_final = traj.t_keyframes[-1], 
                               use_mocap=False, 
                               terminate=False, 
@@ -275,12 +277,14 @@ def single_minsnap_instance(world, vehicle, controller, num_waypoints, start_way
                               plot_mocap=False, 
                               plot_estimator=False, 
                               plot_imu=False, 
-                              animate_bool=False, 
+                              animate_bool=True, 
                               animate_wind=False, 
-                              verbose=False)
+                              verbose=False,
+                              waypoints=waypoints,
+                              fname=fname)
     
     if save_trial:
-        savepath = os.path.join(save_path, 'trial_data_200000')
+        savepath = os.path.join(save_path, 'trial_data_for_ani')
         # savepath = os.path.join(os.path.dirname(__file__), 'trial_data')
         if not os.path.exists(savepath):
             os.makedirs(savepath)
@@ -308,7 +312,7 @@ def generate_data(output_csv_file, world, vehicle, controller,
                   start_waypoint, end_waypoint, 
                   parallel=True,
                   save_individual_trials=False,
-                  robust_c=[0, 1, 0.1, 0.5]):
+                  robust_c=[0]):
     """
     Generates data for training.
     Inputs:
@@ -414,7 +418,8 @@ def main(num_simulations, parallel_bool, save_trials=False):
 
     # Create the output file
     # output_csv_file = os.path.dirname(__file__) + '/data.csv'
-    output_csv_file = os.path.join(save_path, 'data_diff_rho.csv')
+    
+    output_csv_file = os.path.join(save_path, 'data_for_ani.csv')
 
     if os.path.exists(output_csv_file):
         # Ask the user if they want to remove the existing file.
@@ -429,7 +434,7 @@ def main(num_simulations, parallel_bool, save_trials=False):
 
     if save_trials:
         # savepath = os.path.join(os.path.dirname(__file__), 'trial_data')
-        savepath = os.path.join(save_path, 'trial_data_200000')
+        savepath = os.path.join(save_path, 'trial_data_for_ani')
         if not os.path.exists(savepath):
             os.makedirs(savepath)
         else:
