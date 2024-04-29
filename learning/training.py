@@ -220,6 +220,7 @@ def main():
     """
     # Path to your CSV file
     csv_file_path = "/workspace/data_output/data_diff_rho.csv"
+    # csv_file_path = "/workspace/data_output/data_asymmetric.csv"
 
     train_dataset = TrajDataset(file_path=csv_file_path, feature_range=(-1, 1))
 

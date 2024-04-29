@@ -66,10 +66,10 @@ class TrajDataset(Dataset):
 
         # Assuming the first column is 'traj_number', the second is 'cost', and the rest are coefficients
         self.coeffs = self.data[:, 5:]  # All coefficient columns
-        self.costs = self.data[:, 4]  # Cost column
+        self.costs = self.data[:, 1]  # Cost column
         # take mean of costs
-        self.costs = np.mean(self.costs)
-        # self.costs = np.ls:og(self.costs)
+        # self.mean_cost = np.mean(self.costs)
+        self.costs = np.log(self.costs)
         # self.coeffs = torch.tensor(self.data[:, 2:], dtype=torch.float32, device=device)
         # self.costs = torch.tensor(self.data[:, 1], dtype=torch.float32, device=device)
 
@@ -93,6 +93,8 @@ class TrajDataset(Dataset):
         # The rest of the columns are coefficients: x_poly_seg_0_coeff_0,x_poly_seg_0_coeff_1, ..., yaw_poly_seg_2_coeff_7
         coeffs = self.coeffs[idx]
         cost = self.costs[idx]
+
+        # cost = self.mean_cost
         # if self.input_transform:
         #     coeffs = self.input_transform(coeffs)
         # if self.target_transform:

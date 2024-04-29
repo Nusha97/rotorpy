@@ -277,14 +277,14 @@ def single_minsnap_instance(world, vehicle, controller, num_waypoints, start_way
                               plot_mocap=False, 
                               plot_estimator=False, 
                               plot_imu=False, 
-                              animate_bool=True, 
+                              animate_bool=False, 
                               animate_wind=False, 
                               verbose=False,
                               waypoints=waypoints,
                               fname=fname)
     
     if save_trial:
-        savepath = os.path.join(save_path, 'trial_data_for_ani')
+        savepath = os.path.join(save_path, 'trial_data_asymmetric')
         # savepath = os.path.join(os.path.dirname(__file__), 'trial_data')
         if not os.path.exists(savepath):
             os.makedirs(savepath)
@@ -297,8 +297,8 @@ def single_minsnap_instance(world, vehicle, controller, num_waypoints, start_way
     print("trajectory_cost: ", trajectory_cost)
 
     # Now extract the polynomial coefficients for the trajectory.
-    pos_poly = traj.x_poly
-    yaw_poly = traj.yaw_poly
+    pos_poly = traj.c_opt_xyz
+    yaw_poly = traj.c_opt_yaw
 
     # summary
     summary_output = np.concatenate((np.array([int(seed)]), trajectory_cost, pos_poly.ravel(), yaw_poly.ravel()))
@@ -419,7 +419,7 @@ def main(num_simulations, parallel_bool, save_trials=False):
     # Create the output file
     # output_csv_file = os.path.dirname(__file__) + '/data.csv'
     
-    output_csv_file = os.path.join(save_path, 'data_for_ani.csv')
+    output_csv_file = os.path.join(save_path, 'data_asymmetric.csv')
 
     if os.path.exists(output_csv_file):
         # Ask the user if they want to remove the existing file.
@@ -434,7 +434,7 @@ def main(num_simulations, parallel_bool, save_trials=False):
 
     if save_trials:
         # savepath = os.path.join(os.path.dirname(__file__), 'trial_data')
-        savepath = os.path.join(save_path, 'trial_data_for_ani')
+        savepath = os.path.join(save_path, 'trial_data_asymmetric')
         if not os.path.exists(savepath):
             os.makedirs(savepath)
         else:
@@ -461,6 +461,10 @@ def main(num_simulations, parallel_bool, save_trials=False):
 
     # Now create the world, vehicle, and controller objects.
     world = World.empty([-world_size/2, world_size/2, -world_size/2, world_size/2, -world_size/2, world_size/2])
+
+    # asymmetrical airdrag
+    quad_params["c_Dx"] = quad_params["c_Dx"] * 5
+
     vehicle = Multirotor(quad_params)
     controller = SE3Control(quad_params)
 
@@ -480,4 +484,4 @@ def main(num_simulations, parallel_bool, save_trials=False):
 
 if __name__=="__main__":
 
-    main(num_simulations=200000, parallel_bool=True, save_trials=True)
+    main(num_simulations=100000, parallel_bool=True, save_trials=True)
