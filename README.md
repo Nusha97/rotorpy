@@ -2,10 +2,16 @@
 A Python-based multirotor simulation environment with aerodynamic wrenches, useful for education and research in estimation, planning, and control for UAVs.
 <p align="center"><img src="/media/double_pillar.gif" width="32%"/><img src="/media/gusty.gif" width="32%"/><img src="/media/minsnap.gif" width="32%"/></p>
 
-## Purpose and Scope
-The purpose of this simulator is to add lumped parameter representations of the UAV aerodynamics to to a multirotor UAV (quadrotor unless otherwise noted). These aerodynamic effects, listed below, are negligible at hover in still air; however, as relative airspeed increases (e.g. for aggressive maneuvers or in the presence of high winds), these aerodynamic effects quickly become noticeable. 
+**NEW in `v1.1.0`**: RotorPy now includes a customizable [Gymnasium](https://github.com/Farama-Foundation/Gymnasium) environment found in the new `rotorpy/learning/` module. 
 
-The engine is intended to be lightweight, easy to install with limited dependencies or requirements, and readable. The simulator is designed to gain intuition and learn how to develop control and/or estimation algorithms for rotary wing vehicles subject to aerodynamic wrenches. 
+<p align="center"><img src="/media/ppo_hover_20k.gif" width="32%"/><img src="/media/ppo_hover_600k.gif" width="32%"/><img src="/media/ppo_hover_1000k.gif" width="32%"/></p>
+
+## Purpose and Scope
+The original focus of this simulator was on accurately simulating rotary-wing UAV dynamics with added lumped parameter representations of the aerodynamics for course design and exploratory research. These aerodynamic effects, listed below, are negligible at hover in still air; however, as relative airspeed increases (e.g. for aggressive maneuvers or in the presence of high winds), they quickly become noticeable and force the student/researcher to reconcile with them. 
+
+As RotorPy continues to grow, the focus is now on building a realistic dynamics simulator that can scale to quickly generate thousands (or even millions) of simulated rotary-wing UAVs for applications in deep learning, reinforcement learning, and Monte Carlo studies on existing (or new!) algorithms in estimation, planning, and control. 
+
+The engine is designed from the bottom up to be lightweight, easy to install with very limited dependencies or requirements, and interpretable to anyone with basic working knowledge of Python. The simulator is intended to gain intuition about UAV dynamics/aerodynamics and learn how to develop control and/or estimation algorithms for rotary wing vehicles subject to aerodynamic wrenches. 
 
 The following aerodynamic effects of interest are within the scope of this model: 
 1. **Parasitic Drag** - Drag associated with non-lifting surfaces like the frame. This drag is quadratic in airspeed. 
@@ -19,11 +25,13 @@ Ultimately the effects boil down to forces acting anti-parallel to the relative 
 
 What's currently ignored: any lift produced by the frame or any torques produced by an imbalance of drag forces on the frame. We also currently neglect variations in the wind along the length of the UAV, implicitly assuming that the characteristic length scales of the wind fields are larger than UAV's maximum dimensions.
 
+RotorPy also includes first-order motor dynamics to simulate lag, as well as support for spatio-temporal wind flow fields for the UAV to interact with. 
+
 # Installation
 
 First, clone this repository into a folder of your choosing.  
 
-It is recommended that you use a virtual environment to install this simulator, as some of the package dependencies are slightly out of date, including `matplotlib` which uses an older version for some of the 3D plotting. I recommend using [Python venv](https://docs.python.org/3/library/venv.html) because it's lightweight. 
+It is recommended that you use a virtual environment to install this simulator. I recommend using [Python venv](https://docs.python.org/3/library/venv.html) because it's lightweight. 
 
 All the necessary dependencies can be installed using the following: 
 **NOTE:** Read this command carefully. The period `.` is intentional. 
@@ -36,11 +44,19 @@ To confirm installation, you should see the package `rotorpy` listed among the o
 
 # Usage
 
-A good place to start would be to reference the `basic_usage.py` script found in the home directory of this simulator. It goes through the necessary imports and how to create and execute an instance of the simulator. 
+#### Regular usage
+A good place to start would be to reference the `rotorpy/examples/basic_usage.py` script. It goes through the necessary imports and how to create and execute an instance of the simulator. 
  
 At minimum the simulator requires vehicle, controller, and trajectory objects. The vehicle (and potentially the controller) is parameterized by a unique parameter file, such as in `rotorpy/vehicles/hummingbird_params.py`. There is also the option to specify your own IMU, world bounds, and how long you would like to run the simulator for. 
 
-The output of the simulator is a dictionary containing a time vector and the time histories of all the vehicle's states, inputs, and measurements. 
+The output of the simulator is a dictionary containing a time vector and the time histories of all the vehicle's states, inputs, and measurements.
+
+#### Reinforcement Learning
+New in `v1.1.0`, RotorPy includes a custom Gymnasium environment, `QuadrotorEnv`, which is a stripped down version of the regular simulation environment intended for applications in reinforcement learning. `QuadrotorEnv` features all the aerodynamics and motor dynamics, but also supports different control abstractions ranging from high level velocity vector commands all the way down to direct individual motor speed commands. This environment also allows the user to specify their own reward function. 
+
+For an example of how to interface with this environment, see `rotorpy/examples/gymnasium_basic_usage.py`. You can also see an example of training a quadrotor to hover using this environment in `rotorpy/examples/ppo_hover_train.py` and `rotorpy/examples/ppo_hover_eval.py`. 
+
+You can find this new environment in the `rotorpy/learning/` module. 
 
 # Development
 
@@ -50,13 +66,35 @@ As for adding more core functionality (e.g., sensors, new vehicle dynamics, anim
 
 If you are adding new functionality, as opposed to simply adding new controllers, wind fields, or trajectories, please make a new branch before starting to make those changes. 
 
-# In Literature
+# Citation
 
-The following is a selection of papers that have used a previous version of RotorPy for generating their simulated results: 
+If you use RotorPy for your work please cite our companion workshop paper contributed to the [RS4UAVs Workshop at ICRA 2023](https://imrclab.github.io/workshop-uav-sims-icra2023/): 
+
+```
+@article{folk2023rotorpy,
+  title={RotorPy: A Python-based Multirotor Simulator with Aerodynamics for Education and Research},
+  author={Folk, Spencer and Paulos, James and Kumar, Vijay},
+  journal={arXiv preprint arXiv:2306.04485},
+  year={2023}
+}
+```
+
+This paper addresses the theory, simulation framework, and benchmarking studies.
+
+# Elsewhere In Literature
+
+The following is a selection of papers that have used RotorPy (or previous versions of RotorPy) for generating their simulated results: 
 1. K. Y. Chee and M. A. Hsieh. "Learning-enhanced Nonlinear Model Predictive Control using Knowledge-based Neural Ordinary Differential Equations and Deep Ensembles," submitted to *5th Annual Learning for Dynamics \& Control Conference*, Philadelphia, PA USA, Jun 2023.
 2. K. Y. Chee, T. Z. Jiahao and M. A. Hsieh. "KNODE-MPC: A Knowledge-Based Data-Driven Predictive Control Framework for Aerial Robots,'' in *IEEE Robotics and Automation Letters*, vol. 7, no. 2, pp. 2819-2826, Apr 2022.
 3. Jiahao, Tom Z. and Chee, Kong Yao and Hsieh, M. Ani. "Online Dynamics Learning for Predictive Control with an Application to Aerial Robots," in *the Proc. of the 2022 Conference on Robot Learning (CoRL)*, Auckland, NZ, Dec 2022.
 4. K. Mao, J. Welde, M. A. Hsieh, and V. Kumar, “Trajectory planning for the bidirectional quadrotor as a differentially flat hybrid system,” in *2023 International Conference on Robotics and Automation (ICRA) (accepted)*, 2023.
+5. He, S., Hsu, C. D., Ong, D., Shao, Y. S., & Chaudhari, P. (2023). Active Perception using Neural Radiance Fields. *arXiv preprint arXiv:2310.09892*.
+
+RotorPy was also listed among other UAV simulators in a recent survey:
+
+Dimmig, C. A., Silano, G., McGuire, K., Gabellieri, C., Hönig, W., Moore, J., & Kobilarov, M. (2023). *Survey of Simulators for Aerial Robots*. arXiv preprint arXiv:2311.02296.
+
+**If you use this simulator for published work, let me know as I am happy to add your reference to this list.**
 
 # Acknowledgements
 

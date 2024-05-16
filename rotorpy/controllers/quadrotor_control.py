@@ -28,6 +28,7 @@ class SE3Control(object):
 
         self.num_rotors      = quad_params['num_rotors']
         self.rotor_pos       = quad_params['rotor_pos']
+        self.rotor_dir       = quad_params['rotor_directions']
 
         # Rotor parameters    
         self.rotor_speed_min = quad_params['rotor_speed_min'] # rad/s
@@ -53,14 +54,17 @@ class SE3Control(object):
         self.kd_pos = np.array([4.0, 4.0, 9])
         self.kp_att = 544
         self.kd_att = 46.64
+        self.kp_vel = 0.1*self.kp_pos   # P gain for velocity controller (only used when the control abstraction is cmd_vel)
 
         # Linear map from individual rotor forces to scalar thrust and vector
         # moment applied to the vehicle.
-        k = self.k_m/self.k_eta
+        k = self.k_m/self.k_eta  # Ratio of torque to thrust coefficient. 
 
         # Below is an automated generation of the control allocator matrix. It assumes that all thrust vectors are aligned
-        # with the z axis and that the "sign" of each rotor yaw moment alternates starting with positive for r1.
-        self.f_to_TM = np.vstack((np.ones((1,self.num_rotors)),np.hstack([np.cross(self.rotor_pos[key],np.array([0,0,1])).reshape(-1,1)[0:2] for key in self.rotor_pos]), np.array([k*(-1)**i for i in range(self.num_rotors)]).reshape(1,-1)))
+        # with the z axis and that the "sign" of each rotor yaw moment alternates starting with positive for r1. 'TM' = "thrust and moments"
+        self.f_to_TM = np.vstack((np.ones((1,self.num_rotors)),
+                                  np.hstack([np.cross(self.rotor_pos[key],np.array([0,0,1])).reshape(-1,1)[0:2] for key in self.rotor_pos]), 
+                                 (k * self.rotor_dir).reshape(1,-1)))
         self.TM_to_f = np.linalg.inv(self.f_to_TM)
 
     def update_ref(self, t, flat_output):
@@ -97,18 +101,12 @@ class SE3Control(object):
             """Return normalized vector."""
             return x / np.linalg.norm(x)
 
-        # def vee_map(S):
-        #     """Return vector corresponding to given skew symmetric matrix."""
-        #     return np.array([-S[1,2], S[0,2], -S[0,1]])
-
         # Desired force vector.
         t = flat_output['x_ddot']+ np.array([0, 0, self.g])
         b3 = normalize(t) 
         F_des = self.mass * (t)# this is vectorized
 
-        # Desired thrust is force projects onto b3 axis.
-        # R = Rotation.from_quat(state['q']).as_matrix() #this is where most of the problem is, there is no error in rotation!
-        # b3 = R @ np.array([0, 0, 1])
+        # Control input 1: collective thrust. 
         u1 = np.dot(F_des, b3)
 
         # Desired orientation to obtain force vector.
@@ -119,10 +117,7 @@ class SE3Control(object):
         b1_des = np.cross(b2_des, b3_des)
         R_des = np.stack([b1_des, b2_des, b3_des]).T
 
-        R = R_des# assume we have perfect tracking on rotation
-        # Orientation error.
-        # S_err = 0.5 * (R_des.T @ R - R.T @ R_des)
-        # att_err = vee_map(S_err)
+        R = R_des # assume we have perfect tracking on rotation
         
         # Following section follows Mellinger paper to compute reference angular velocity
         dot_u1 = np.dot(b3,flat_output['x_dddot'])
@@ -142,10 +137,11 @@ class SE3Control(object):
         r_dot = flat_output['yaw_ddot'] *np.dot(np.array([0,0,1.0]), b3_des) #uniquely need yaw_ddot
         Alpha = np.array([p_dot, q_dot, r_dot]) 
 
-
-
+        # Control input 2: moment on each body axis
+    
         u2 =  self.inertia @ Alpha + np.cross(Omega, self.inertia @ Omega)
-        # print(u1,u2)
+
+        # Convert to cmd motor speeds. 
         TM = np.array([u1, u2[0], u2[1], u2[2]])
         cmd_motor_forces = self.TM_to_f @ TM
         cmd_motor_speeds = cmd_motor_forces / self.k_eta
@@ -186,9 +182,12 @@ class SE3Control(object):
         Outputs:
             control_input, a dict describing the present computed control inputs with keys
                 cmd_motor_speeds, rad/s
+                cmd_motor_thrusts, N
                 cmd_thrust, N 
                 cmd_moment, N*m
                 cmd_q, quaternion [i,j,k,w]
+                cmd_w, angular rates in the body frame, rad/s
+                cmd_v, velocity in the world frame, m/s
         """
         cmd_motor_speeds = np.zeros((4,))
         cmd_thrust = 0
@@ -203,7 +202,7 @@ class SE3Control(object):
             """Return vector corresponding to given skew symmetric matrix."""
             return np.array([-S[1,2], S[0,2], -S[0,1]])
 
-        # Desired force vector.
+        # Get the desired force vector.
         pos_err  = state['x'] - flat_output['x']
         dpos_err = state['v'] - flat_output['x_dot']
         F_des = self.mass * (- self.kp_pos*pos_err
@@ -232,21 +231,29 @@ class SE3Control(object):
         w_des = np.array([0, 0, flat_output['yaw_dot']])
         w_err = state['w'] - w_des
 
-        # Angular control; vector units of N*m.
-        u2 = self.inertia @ (-self.kp_att*att_err - self.kd_att*w_err)
+        # Desired torque, in units N-m.
+        u2 = self.inertia @ (-self.kp_att*att_err - self.kd_att*w_err) + np.cross(state['w'], self.inertia@state['w'])  # Includes compensation for wxJw component
+
+        # Compute command body rates by doing PD on the attitude error. 
+        cmd_w = -self.kp_att*att_err - self.kd_att*w_err
 
         # Compute motor speeds. Avoid taking square root of negative numbers.
         TM = np.array([u1, u2[0], u2[1], u2[2]])
-        cmd_motor_forces = self.TM_to_f @ TM
-        cmd_motor_speeds = cmd_motor_forces / self.k_eta
+        cmd_rotor_thrusts = self.TM_to_f @ TM
+        cmd_motor_speeds = cmd_rotor_thrusts / self.k_eta
         cmd_motor_speeds = np.sign(cmd_motor_speeds) * np.sqrt(np.abs(cmd_motor_speeds))
 
-        cmd_thrust = u1
-        cmd_moment = u2
-        cmd_q = Rotation.from_matrix(R_des).as_quat()
+        # Assign controller commands.
+        cmd_thrust = u1                                             # Commanded thrust, in units N.
+        cmd_moment = u2                                             # Commanded moment, in units N-m.
+        cmd_q = Rotation.from_matrix(R_des).as_quat()               # Commanded attitude as a quaternion.
+        cmd_v = -self.kp_vel*pos_err + flat_output['x_dot']     # Commanded velocity in world frame (if using cmd_vel control abstraction), in units m/s
 
         control_input = {'cmd_motor_speeds':cmd_motor_speeds,
+                         'cmd_motor_thrusts':cmd_rotor_thrusts,
                          'cmd_thrust':cmd_thrust,
                          'cmd_moment':cmd_moment,
-                         'cmd_q':cmd_q}
+                         'cmd_q':cmd_q,
+                         'cmd_w':cmd_w,
+                         'cmd_v':cmd_v}
         return control_input
