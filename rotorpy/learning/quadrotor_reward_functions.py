@@ -5,7 +5,7 @@ import gymnasium as gym
 from gymnasium import spaces
 
 import math
-from rotorpy.utils.helper_functions import compute_yaw_from_quarternion
+from rotorpy.utils.helper_functions import compute_yaw_from_quaternion
 
 """
 Reward functions for quadrotor tasks. 
@@ -62,7 +62,7 @@ def hover_reward(observation, action, weights={'x': 1, 'v': 0.1, 'w': 0, 'u': 1e
 
 #     return -cost
 
-def trajectory_reward(observation, action, weights={'x': 1, 'v': 0.1, 'q': 0, 'u': 1e-5}):
+def trajectory_reward(observation, action, weights={'x': 1, 'v': 0.1, 'q': 0.5, 'u': 0.1}):
     """
     Rewards for trajectory tracking given observations following DATT. It is a combination of position error, 
     velocity error, body rates, and action reward.
@@ -77,16 +77,16 @@ def trajectory_reward(observation, action, weights={'x': 1, 'v': 0.1, 'q': 0, 'u
     dist_reward = -weights['x']*np.linalg.norm(observation[0:3]-observation[13:16])
 
     # Compute the velocity reward
-    vel_reward = -weights['v']*np.linalg.norm(observation[3:6]-observation[16:19])
+    vel_reward = -weights['v']*min(np.linalg.norm(observation[3:6]), 1.0)
 
     # Compute the yaw reward
     yaw = compute_yaw_from_quaternion(observation[6:10])
-    yaw_reward = -weights['q'] * np.linalg.norm(yaw - observation[28:31])
+    yaw_reward = -weights['q'] * np.linalg.norm(yaw - observation[19])
 
     # Compute the angular rate reward
-    ang_rate_reward = -weights['w'] * np.linalg.norm(observation[10:13] - observation[31:34])
+    # ang_rate_reward = -weights['w'] * np.linalg.norm(observation[10:13])
 
     # Compute the action reward
-    action_reward = -weights['u']*np.linalg.norm(action)
+    action_reward = -0.2 * abs(action[0]) - 0.1 * np.linalg.norm(action[1:])
 
-    return dist_reward + vel_reward + yaw_reward + action_reward + ang_rate_reward
+    return dist_reward + vel_reward + yaw_reward + action_reward 

@@ -208,26 +208,25 @@ def sample_waypoints(
     return np.array(waypoints)
 
 
-def compute_yaw_from_quaternion(quaternions):
-    R_matrices = R.from_quat(quaternions).as_matrix()
-    b3 = R_matrices[:, :, 2]
-    H = np.zeros((len(quaternions), 3, 3))
-    for i in range(len(quaternions)):
-        H[i, :, :] = np.array(
+def compute_yaw_from_quaternion(quaternion):
+    R_matrix = R.from_quat(quaternion).as_matrix()
+    b3 = R_matrix[:, 2]
+    H = np.zeros((3, 3))
+    H[:, :] = np.array(
             [
                 [
-                    1 - (b3[i, 0] ** 2) / (1 + b3[i, 2]),
-                    -(b3[i, 0] * b3[i, 1]) / (1 + b3[i, 2]),
-                    b3[i, 0],
+                    1 - (b3[0] ** 2) / (1 + b3[2]),
+                    -(b3[0] * b3[1]) / (1 + b3[2]),
+                    b3[0],
                 ],
                 [
-                    -(b3[i, 0] * b3[i, 1]) / (1 + b3[i, 2]),
-                    1 - (b3[i, 1] ** 2) / (1 + b3[i, 2]),
-                    b3[i, 1],
+                    -(b3[0] * b3[1]) / (1 + b3[2]),
+                    1 - (b3[1] ** 2) / (1 + b3[2]),
+                    b3[1],
                 ],
-                [-b3[i, 0], -b3[i, 1], b3[i, 2]],
+                [-b3[0], -b3[1], b3[2]],
             ]
-        )
-    Hyaw = np.transpose(H, axes=(0, 2, 1)) @ R_matrices
-    actual_yaw = np.arctan2(Hyaw[:, 1, 0], Hyaw[:, 0, 0])
+    )
+    Hyaw = np.transpose(H) @ R_matrix
+    actual_yaw = np.arctan2(Hyaw[1, 0], Hyaw[0, 0])
     return actual_yaw
